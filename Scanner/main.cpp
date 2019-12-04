@@ -1,10 +1,14 @@
 #define _WINSOCK_DEPRECATED_NO_WARNINGS
 #include <cstdio>
 #include <cstdlib>
+#include <memory>
 #include <WinSock2.h>
 #include <openssl/ssl.h>
 #include <openssl/err.h>
+#include "ConnSocket.hpp"
 
+using SSL_CTX_ptr = std::unique_ptr<SSL_CTX, decltype(&SSL_CTX_free)>;
+using SSL_ptr = std::unique_ptr<SSL, decltype(&SSL_free)>;
 
 static void log_ssl()
 {
@@ -30,11 +34,14 @@ static void dump(const char* data, const int len)
 }
 
 
+
+
 int main()
 {
    SSL_library_init();
    SSLeay_add_ssl_algorithms();
    SSL_load_error_strings();
+   SSL_CTX_ptr ssl_ctx(SSL_CTX_new(SSLv23_client_method()), SSL_CTX_free);
 
    WSADATA wsaData = { 0 };
    int iRet = WSAStartup(MAKEWORD(2, 2), &wsaData);
@@ -44,29 +51,32 @@ int main()
       return 1;
    }
 
-   SOCKET sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-   if (sock == INVALID_SOCKET)
-   {
-      printf("Error creating socket\n");
-      return 1;
-   }
+   ConnSocket conn;
 
-   sockaddr_in clientService;
-   clientService.sin_family = AF_INET;
-   clientService.sin_addr.s_addr = inet_addr("200.147.118.40");
-   clientService.sin_port = htons(443);
-
-   iRet = connect(sock, reinterpret_cast<sockaddr*>(&clientService), sizeof(clientService));
-   if (iRet != 0)
+   if (!conn.connect(inet_addr("200.147.118.40"), 443))
    {
       printf("Error connecting socket\n");
       return 1;
    }
 
-   printf("Connected\n");
+   WSAPOLLFD fda{ conn.get_fd(), POLLOUT, 0};
 
-   SSL_CTX* ctx = SSL_CTX_new(SSLv23_client_method());
-   SSL* ssl = SSL_new(ctx);
+   int ret = WSAPoll( &fda, 1,5000 );
+   if (ret <= 0)
+   {
+      printf("WSAPoll error\n");
+      return 1;
+   }
+   else if (!(fda.revents & POLLOUT))
+   {
+      printf("WSAPoll signaled incorrectly - ret=%d\n", ret);
+      return 1;
+   }
+
+   fda.events = POLLIN;
+   fda.revents = 0;
+
+   SSL_ptr ssl(SSL_new(ssl_ctx.get()), SSL_free);
    if (!ssl)
    {
       printf("Error creating SSL.\n");
@@ -74,43 +84,52 @@ int main()
       return -1;
    }
 
-   SSL_set_connect_state(ssl);
-   SSL_set_bio(ssl, BIO_new(BIO_s_mem()), BIO_new(BIO_s_mem()));
-   SSL_do_handshake(ssl);
+   SSL_set_connect_state(ssl.get());
+   SSL_set_bio(ssl.get(), BIO_new(BIO_s_mem()), BIO_new(BIO_s_mem()));
+   SSL_do_handshake(ssl.get());
 
-   while (!SSL_is_init_finished(ssl))
+   char outbuf[4096];
+   int read = BIO_read(SSL_get_wbio(ssl.get()), outbuf, sizeof(outbuf));
+   if (read <= 0)
    {
-      char outbuf[4096];
-      int written = 0;
-      int read = BIO_read(SSL_get_wbio(ssl), outbuf, sizeof(outbuf));
-      if (read > 0)
-      {
-         printf("BIO_read(%d) => ", read);
-         dump(outbuf, read);
-
-         int ret = send(sock, outbuf, read, 0);
-         if (ret != read)
-         {
-            printf("Error sending data\n");
-         }
-      }
-
-      read = recv(sock, outbuf, sizeof(outbuf), 0);
-      if (read > 0)
-      {
-         printf("recv(%d) => ", read);
-         dump(outbuf, read);
-
-         BIO_write(SSL_get_rbio(ssl), outbuf, read);
-      }
-
-      SSL_do_handshake(ssl);
+      printf("Error reading BIO\n");
+      return 1;
+   }
+   
+   if( !conn.send(outbuf, read) )
+   {
+      printf("Error sending data\n");
+      return 1;
    }
 
-   SSL_free(ssl);
-   SSL_CTX_free(ctx);
+   while (0 == BIO_pending(SSL_get_wbio(ssl.get())))
+   {
+      int ret = WSAPoll(&fda, 1, 5000);
+      if (ret <= 0)
+      {
+         printf("WSAPoll error\n");
+         return 1;
+      }
+      else if (!(fda.revents & POLLIN))
+      {
+         printf("WSAPoll signaled incorrectly - ret=%d - revents=%X\n", ret, fda.revents);
+         //return 1;
+      }
+      else
+      {
+         read = conn.recv(outbuf, sizeof(outbuf));
+         if (read > 0)
+         {
+            printf("recv(%d) => ", read);
+            dump(outbuf, read);
 
-   closesocket(sock);
+            BIO_write(SSL_get_rbio(ssl.get()), outbuf, read);
+         }
+
+         SSL_do_handshake(ssl.get());
+         fda.revents = 0;
+      }
+   }
 
    WSACleanup();
 

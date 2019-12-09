@@ -1,5 +1,6 @@
 #pragma once
 #include <memory>
+#include <chrono>
 #include <system_error>
 #include <WinSock2.h>
 #include <openssl/ssl.h>
@@ -7,6 +8,8 @@
 
 using SSL_CTX_ptr = std::unique_ptr<SSL_CTX, decltype(&SSL_CTX_free)>;
 using SSL_ptr = std::unique_ptr<SSL, decltype(&SSL_free)>;
+
+static const auto sock_timeout = std::chrono::milliseconds(5000);
 
 
 static void dump(const char* data, const int len)
@@ -29,9 +32,9 @@ public:
 
    ConnSocket() : m_ssl(nullptr, SSL_free) {}
 
-   ~ConnSocket() noexcept
+   bool is_connected() const noexcept
    {
-      closesocket(m_sock);
+      return (m_sock != INVALID_SOCKET);
    }
 
    bool connect(ULONG address, u_short port) noexcept
@@ -76,8 +79,15 @@ public:
       }
 
       m_state = State_e::Connecting;
+      lastStateChange = std::chrono::system_clock::now();
 
       return true;
+   }
+
+   void disconnect() noexcept
+   {
+      closesocket(m_sock);
+      m_sock = INVALID_SOCKET;
    }
 
    WSAPOLLFD get_pollfd() const noexcept
@@ -85,9 +95,22 @@ public:
       return { m_sock, (m_state == State_e::Connecting) ? POLLOUT : POLLIN, 0 };
    }
 
-   bool process_poll()
+   bool process_poll(WSAPOLLFD& fda)
    {
-      if (m_state == State_e::Connecting)
+      if (fda.revents == 0)
+      {  // Was not signaled. Did it timeout??
+         const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - lastStateChange);
+         if (elapsed > sock_timeout)
+         {
+            //printf("Timeout\n");
+            return false;
+         }
+         else
+         {
+            return true;
+         }
+      }
+      else if ((m_state == State_e::Connecting) && (fda.revents & POLLOUT))
       {
          //SSL_CTX_ptr ssl_ctx(SSL_CTX_new(SSLv23_client_method()), SSL_CTX_free);
          m_ssl = SSL_ptr(SSL_new(ssl_ctx.get()), SSL_free);
@@ -103,20 +126,20 @@ public:
             return false;
          }
 
-         //printf("send(%d) => ", read);
-         //dump(outbuf, read);
-
          if (!send(outbuf, read))
          {
             printf("Error sending data\n");
             return false;
          }
 
+         lastStateChange = std::chrono::system_clock::now();
          m_state = State_e::WaitingReception;
+         fda.revents = 0;
+         fda.events = POLLIN;
 
          return true;
       }
-      else //if (m_state == State_e::WaitingReception)
+      else if ((m_state == State_e::WaitingReception) && (fda.revents & POLLIN))
       {
          char outbuf[4096];
          int read = recv(outbuf, sizeof(outbuf));
@@ -129,8 +152,13 @@ public:
          }
 
          SSL_do_handshake(m_ssl.get());
+         fda.revents = 0;
          
          return (0 == BIO_pending(SSL_get_wbio(m_ssl.get())));
+      }
+      else
+      {
+         printf("Signaled incorrectly\n");
       }
    }
 
@@ -146,6 +174,7 @@ private:
    SOCKET m_sock = INVALID_SOCKET;
    SSL_ptr m_ssl;
    State_e  m_state = State_e::Connecting;
+   std::chrono::time_point<std::chrono::system_clock> lastStateChange;
 
    bool send(const char* data, int len) noexcept
    {

@@ -39,13 +39,13 @@ int main()
       return 1;
    }
 
-   const size_t concurrency = 1000;
+   const size_t concurrency = 64000;
    std::vector<ConnSocket> socks(concurrency);
    std::vector<WSAPOLLFD>  fdas(concurrency);
    IPSpaceSweeper ip_range;
 
    //ip_range.add_range("200.147.118.0", 24);
-   ip_range.add_range("200.147.116.0", 22);
+   ip_range.add_range("200.0.0.0", 8);
 
    const auto stat_interval = std::chrono::seconds(2);
    const auto start = std::chrono::system_clock::now();
@@ -53,7 +53,7 @@ int main()
    while(true)
    {
       bool is_there_active_conn = false;
-      for (int i = 0; i < socks.size(); ++i)
+      for (size_t i = 0; i < socks.size(); ++i)
       {
          if (socks[i].is_connected())
          {
@@ -65,7 +65,7 @@ int main()
             //printf("Testing %d.%d.%d.%d\n", ip & 0x000000FF, (ip & 0x0000FF00) >> 8, (ip & 0x00FF0000) >> 16, (ip & 0xFF000000) >> 24);
             if (!socks[i].connect(ip, 443))
             {
-               printf("Error connecting socket\n");
+               printf("Error connecting socket %zd\n", i);
                return -1;
             }
             else
@@ -114,7 +114,7 @@ int main()
          const auto remaining = ((elapsed.count() * 100.0) / percentage) - elapsed.count();
 
          printf("\n******************** PROGRESS ********************\n");
-         printf("  Sweeped %u of %u addresses - That is %4.1f%%\n", current, max_count, percentage);
+         printf("  Sweeped %u of %u addresses - That is %5.2f%%\n", current, max_count, percentage);
          printf("  Elapsed %lld seconds\n", elapsed.count());
          printf("  Estimated remaining time: %.0f seconds\n", remaining);
 

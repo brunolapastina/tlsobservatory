@@ -10,6 +10,7 @@
 #include "ConnSocket.hpp"
 #include "IPSpaceSweeper.hpp"
 
+SSL_CTX_ptr g_ssl_ctx(nullptr, SSL_CTX_free);;
 
 static void log_ssl()
 {
@@ -31,6 +32,8 @@ int main()
    SSLeay_add_ssl_algorithms();
    SSL_load_error_strings();
 
+   g_ssl_ctx.reset(SSL_CTX_new(SSLv23_client_method()));
+
    WSADATA wsaData = { 0 };
    int iRet = WSAStartup(MAKEWORD(2, 2), &wsaData);
    if (iRet != 0)
@@ -39,7 +42,7 @@ int main()
       return 1;
    }
 
-   const size_t concurrency = 64000;
+   const size_t concurrency = 5000;
    std::vector<ConnSocket> socks(concurrency);
    std::vector<WSAPOLLFD>  fdas(concurrency);
    IPSpaceSweeper ip_range;
@@ -50,6 +53,8 @@ int main()
    const auto stat_interval = std::chrono::seconds(2);
    const auto start = std::chrono::system_clock::now();
    auto last_stat = start;
+
+   size_t returnedData = 0;
    while(true)
    {
       bool is_there_active_conn = false;
@@ -99,8 +104,14 @@ int main()
       {
          for (int i = 0; i < socks.size(); ++i)
          {
-            if (!socks[i].process_poll(fdas[i]))
+            if (socks[i].process_poll(fdas[i]))
             {
+               auto ret = socks[i].get_result();
+               if (ret.data_len > 0)
+               {
+                  //printf("IP.%08X:%d  ->  Data(%zd)\n", ret.ip, ret.port, ret.data_len);
+                  ++returnedData;
+               }
                socks[i].disconnect();
             }
          }
@@ -110,11 +121,13 @@ int main()
       {
          const auto [current, max_count] = ip_range.get_stats();
          const float percentage = (100.0 * current) / max_count;
+         const float data_percentage = (100.0 * returnedData) / current;
          const auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() - start);
          const auto remaining = ((elapsed.count() * 100.0) / percentage) - elapsed.count();
 
          printf("\n******************** PROGRESS ********************\n");
-         printf("  Sweeped %u of %u addresses - That is %5.2f%%\n", current, max_count, percentage);
+         printf("  Sweeped %u of %u addresses - %5.2f%%\n", current, max_count, percentage);
+         printf("  %zd IPs returned data - %5.2f%%\n", returnedData, data_percentage);
          printf("  Elapsed %lld seconds\n", elapsed.count());
          printf("  Estimated remaining time: %.0f seconds\n", remaining);
 

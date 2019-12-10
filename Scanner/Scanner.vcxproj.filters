@@ -21,6 +21,9 @@
     <ClCompile Include="rand-blackrock.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="base64.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="ConnSocket.hpp">
@@ -30,6 +33,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="rand-blackrock.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="base64.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

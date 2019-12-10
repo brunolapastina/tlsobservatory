@@ -1,16 +1,21 @@
 #pragma once
 #include <memory>
 #include <chrono>
+#include <vector>
+#include <string>
+#include <cmath>
 #include <system_error>
 #include <WinSock2.h>
 #include <openssl/ssl.h>
 #include <openssl/err.h>
+#include "base64.h"
 
 using SSL_CTX_ptr = std::unique_ptr<SSL_CTX, decltype(&SSL_CTX_free)>;
 using SSL_ptr = std::unique_ptr<SSL, decltype(&SSL_free)>;
 
 static const auto sock_timeout = std::chrono::milliseconds(5000);
 
+extern SSL_CTX_ptr g_ssl_ctx;
 
 static void dump(const char* data, const int len)
 {
@@ -30,7 +35,11 @@ public:
    ConnSocket& operator=(const ConnSocket&) = delete;
    ConnSocket& operator=(ConnSocket&&) = default;
 
-   ConnSocket() : m_ssl(SSL_new(ssl_ctx.get()), SSL_free) {}
+   ConnSocket() : m_ssl(nullptr, SSL_free)
+   {
+      m_recv_data.reserve(6 * 1024);
+      m_encoded_data.reserve(8 * 1024);   // Base64 data is 4/3 larger
+   }
 
    bool is_connected() const noexcept
    {
@@ -45,6 +54,14 @@ public:
       if (m_sock == INVALID_SOCKET)
       {
          printf("Error creating socket - LastError=%d\n", WSAGetLastError());
+         return false;
+      }
+
+      LINGER lin{ 0,0 };
+      ret = setsockopt(m_sock, SOL_SOCKET, SO_LINGER, (const char*)&lin, sizeof(lin));
+      if (ret != 0)
+      {
+         printf("Error setting socket opt - LastError=%d\n", WSAGetLastError());
          return false;
       }
 
@@ -86,6 +103,7 @@ public:
 
    void disconnect() noexcept
    {
+      shutdown(m_sock, SD_BOTH);
       closesocket(m_sock);
       m_sock = INVALID_SOCKET;
       m_ssl.reset();
@@ -96,6 +114,12 @@ public:
       return { m_sock, (m_state == State_e::Connecting) ? POLLOUT : POLLIN, 0 };
    }
 
+
+   /**
+    *Returns: 
+    *    true when it is done comunicating with the socket
+    *    false if there communication is still going on
+    **/
    bool process_poll(WSAPOLLFD& fda)
    {
       if (fda.revents == 0)
@@ -104,16 +128,16 @@ public:
          if (elapsed > sock_timeout)
          {
             //printf("Timeout\n");
-            return false;
+            return true;
          }
          else
          {
-            return true;
+            return false;
          }
       }
       else if ((m_state == State_e::Connecting) && (fda.revents & POLLOUT))
       {
-         m_ssl.reset(SSL_new(ssl_ctx.get()));
+         m_ssl.reset(SSL_new(g_ssl_ctx.get()));
          SSL_set_connect_state(m_ssl.get());
          SSL_set_bio(m_ssl.get(), BIO_new(BIO_s_mem()), BIO_new(BIO_s_mem()));
          SSL_do_handshake(m_ssl.get());
@@ -123,21 +147,23 @@ public:
          if (read <= 0)
          {
             printf("Error reading BIO\n");
-            return false;
+            return true;
          }
 
          if (!send(outbuf, read))
          {
             printf("Error sending data\n");
-            return false;
+            return true;
          }
 
+         m_recv_data.clear();
+         m_encoded_data.clear();
          lastStateChange = std::chrono::system_clock::now();
          m_state = State_e::WaitingReception;
          fda.revents = 0;
          fda.events = POLLIN;
 
-         return true;
+         return false;
       }
       else if ((m_state == State_e::WaitingReception) && (fda.revents & POLLIN))
       {
@@ -145,6 +171,7 @@ public:
          int read = recv(outbuf, sizeof(outbuf));
          if (read > 0)
          {
+            m_recv_data.insert(m_recv_data.end(), outbuf, outbuf + read);
             //printf("recv(%d) => ", read);
             //dump(outbuf, read);
 
@@ -154,22 +181,42 @@ public:
          SSL_do_handshake(m_ssl.get());
          fda.revents = 0;
          
-         return (0 == BIO_pending(SSL_get_wbio(m_ssl.get())));
+         return (0 != BIO_pending(SSL_get_wbio(m_ssl.get())));
       }
       else if (fda.revents & POLLHUP)
       {
-         return false;
+         return true;
       }
       else
       {
          printf("Signaled incorrectly\n");
          std::abort();
+         return true;
       }
    }
 
-private:
-   static SSL_CTX_ptr ssl_ctx;
+   struct conn_result_t
+   {
+      unsigned long  ip;
+      unsigned short port;
+      const char* data;
+      size_t data_len;
+   };
 
+   conn_result_t get_result() noexcept
+   {
+      base64::encode(m_recv_data, m_encoded_data);
+
+      conn_result_t ret;
+      ret.ip = 0;
+      ret.port = 443;
+      ret.data = m_encoded_data.data();
+      ret.data_len = m_encoded_data.length();
+
+      return ret;
+   }
+
+private:
    enum class State_e
    {
       Connecting,
@@ -180,6 +227,9 @@ private:
    SSL_ptr m_ssl;
    State_e  m_state = State_e::Connecting;
    std::chrono::time_point<std::chrono::system_clock> lastStateChange;
+
+   std::vector<uint8_t> m_recv_data;
+   std::string m_encoded_data;
 
    bool send(const char* data, int len) noexcept
    {
@@ -200,5 +250,3 @@ private:
       return ret;
    }
 };
-
-SSL_CTX_ptr ConnSocket::ssl_ctx(SSL_CTX_new(SSLv23_client_method()), SSL_CTX_free);

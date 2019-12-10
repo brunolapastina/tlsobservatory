@@ -30,7 +30,7 @@ public:
    ConnSocket& operator=(const ConnSocket&) = delete;
    ConnSocket& operator=(ConnSocket&&) = default;
 
-   ConnSocket() : m_ssl(nullptr, SSL_free) {}
+   ConnSocket() : m_ssl(SSL_new(ssl_ctx.get()), SSL_free) {}
 
    bool is_connected() const noexcept
    {
@@ -44,7 +44,7 @@ public:
       m_sock = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
       if (m_sock == INVALID_SOCKET)
       {
-         printf("Error creating socket\n");
+         printf("Error creating socket - LastError=%d\n", WSAGetLastError());
          return false;
       }
 
@@ -58,7 +58,7 @@ public:
          ret = ioctlsocket(m_sock, FIONBIO, &iMode);
          if (ret != NO_ERROR)
          {
-            printf("ioctlsocket failed\n");
+            printf("ioctlsocket failed - LastError=%d\n", WSAGetLastError());
             return false;
          }
       #else
@@ -88,6 +88,7 @@ public:
    {
       closesocket(m_sock);
       m_sock = INVALID_SOCKET;
+      m_ssl.reset();
    }
 
    WSAPOLLFD get_pollfd() const noexcept
@@ -112,8 +113,7 @@ public:
       }
       else if ((m_state == State_e::Connecting) && (fda.revents & POLLOUT))
       {
-         //SSL_CTX_ptr ssl_ctx(SSL_CTX_new(SSLv23_client_method()), SSL_CTX_free);
-         m_ssl = SSL_ptr(SSL_new(ssl_ctx.get()), SSL_free);
+         m_ssl.reset(SSL_new(ssl_ctx.get()));
          SSL_set_connect_state(m_ssl.get());
          SSL_set_bio(m_ssl.get(), BIO_new(BIO_s_mem()), BIO_new(BIO_s_mem()));
          SSL_do_handshake(m_ssl.get());

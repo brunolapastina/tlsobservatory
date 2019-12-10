@@ -156,9 +156,14 @@ public:
          
          return (0 == BIO_pending(SSL_get_wbio(m_ssl.get())));
       }
+      else if (fda.revents & POLLHUP)
+      {
+         return false;
+      }
       else
       {
          printf("Signaled incorrectly\n");
+         std::abort();
       }
    }
 

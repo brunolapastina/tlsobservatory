@@ -8,6 +8,7 @@
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 #include "ConnSocket.hpp"
+#include "IPSpaceSweeper.hpp"
 
 
 static void log_ssl()
@@ -38,11 +39,17 @@ int main()
       return 1;
    }
 
-   const size_t concurrency = 100;
+   const size_t concurrency = 1000;
    std::vector<ConnSocket> socks(concurrency);
    std::vector<WSAPOLLFD>  fdas(concurrency);
-   int curr_address = 1;
+   IPSpaceSweeper ip_range;
 
+   //ip_range.add_range("200.147.118.0", 24);
+   ip_range.add_range("200.147.116.0", 22);
+
+   const auto stat_interval = std::chrono::seconds(2);
+   const auto start = std::chrono::system_clock::now();
+   auto last_stat = start;
    while(true)
    {
       bool is_there_active_conn = false;
@@ -52,18 +59,17 @@ int main()
          {
             is_there_active_conn = true;
          }
-         else if(curr_address < 255 )
+         else if(!ip_range.has_range_finished())
          {
-            char address[20];
-            sprintf_s(address, "200.147.118.%d", curr_address);
-            printf("Testing %s\n", address);
-            if (!socks[i].connect(inet_addr(address), 443))
+            const auto ip = ip_range.get_ip();
+            //printf("Testing %d.%d.%d.%d\n", ip & 0x000000FF, (ip & 0x0000FF00) >> 8, (ip & 0x00FF0000) >> 16, (ip & 0xFF000000) >> 24);
+            if (!socks[i].connect(ip, 443))
             {
                printf("Error connecting socket\n");
+               return -1;
             }
             else
             {
-               ++curr_address;
                is_there_active_conn = true;
                fdas[i] = socks[i].get_pollfd();
             }
@@ -84,7 +90,6 @@ int main()
       }
 
       int ret = WSAPoll(fdas.data(), static_cast<ULONG>(fdas.size()), 100);
-      //printf("Poll returned %d\n", ret);
       if (ret < 0)
       {
          printf("WSAPoll error - Error=%d\n", WSAGetLastError());
@@ -100,50 +105,22 @@ int main()
             }
          }
       }
+
+      if ((std::chrono::system_clock::now() - last_stat) >= stat_interval)
+      {
+         const auto [current, max_count] = ip_range.get_stats();
+         const float percentage = (100.0 * current) / max_count;
+         const auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() - start);
+         const auto remaining = ((elapsed.count() * 100.0) / percentage) - elapsed.count();
+
+         printf("\n******************** PROGRESS ********************\n");
+         printf("  Sweeped %u of %u addresses - That is %4.1f%%\n", current, max_count, percentage);
+         printf("  Elapsed %lld seconds\n", elapsed.count());
+         printf("  Estimated remaining time: %.0f seconds\n", remaining);
+
+         last_stat = std::chrono::system_clock::now();
+      }
    }
-
-   /*for (int i = 1; i < 255; ++i)
-   {
-      char address[64];
-      sprintf_s(address, "200.147.118.%d", i);
-      printf("testing ip %s\n", address);
-
-      ConnSocket conn;
-
-      if (!conn.connect(inet_addr(address), 443))
-      {
-         printf("Error connecting socket\n");
-         return 1;
-      }
-
-      while (true)
-      {
-         auto fda = conn.get_pollfd();
-         int ret = WSAPoll(&fda, 1, 5000);
-         if (ret < 0)
-         {
-            printf("WSAPoll error\n");
-            break;
-         }
-         else if (ret == 0)
-         {
-            printf("WSAPoll timeout\n");
-            break;
-         }
-         else if (!(fda.revents & fda.events))
-         {
-            printf("WSAPoll signaled incorrectly - ret=%d - revents=%X\n", ret, fda.revents);
-            break;
-         }
-         else
-         {
-            if (!conn.process_poll())
-            {
-               break;
-            }
-         }
-      }
-   }*/
 
    WSACleanup();
 

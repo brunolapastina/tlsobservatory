@@ -145,8 +145,8 @@ public:
          int read = recv(outbuf, sizeof(outbuf));
          if (read > 0)
          {
-            printf("recv(%d) => ", read);
-            dump(outbuf, read);
+            //printf("recv(%d) => ", read);
+            //dump(outbuf, read);
 
             BIO_write(SSL_get_rbio(m_ssl.get()), outbuf, read);
          }

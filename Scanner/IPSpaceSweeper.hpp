@@ -1,0 +1,97 @@
+#pragma once
+#include <cstdlib>
+#include <vector>
+#include <algorithm>
+#include <cassert>
+#include <tuple>
+#include <random>
+#include "rand-blackrock.h"
+
+class IPSpaceSweeper
+{
+public:
+   IPSpaceSweeper() : rand_gen(std::random_device()()) {}
+
+   void add_range(const char* addr, unsigned char mask)
+   {
+      add_range(inet_addr(addr), mask);
+   }
+
+   void add_range(unsigned long ip, unsigned char mask)
+   {
+      printf("%d.%d.%d.%d/%d  =>  ", ip & 0x000000FF, (ip & 0x0000FF00) >> 8, (ip & 0x00FF0000) >> 16, (ip & 0xFF000000) >> 24, mask);
+
+      if (mask > 32)
+      {
+         printf("Invalid mask\n");
+         return;
+      }
+
+      const unsigned long ip_mask = (mask) ? (static_cast<signed long>(0x80000000) >> (mask-1)) : 0;
+      ip = ntohl(ip);
+
+      if (ip & ~ip_mask)
+      {
+         printf("Invalid address for mask\n");
+         return;
+      }
+
+      unsigned long range_size = (~ip_mask) - 1;
+      printf("range_size = %u\n", range_size);
+
+      m_total_range_length += range_size;
+
+      m_ipSpaceToSweep.emplace_back((ip + 1), (ip + range_size));
+
+      std::sort(m_ipSpaceToSweep.begin(), m_ipSpaceToSweep.end(), [](const range_t& a, const range_t& b) {
+            return a.begin < b.begin;
+         });
+
+      rand_blackrock = BlackRock(m_total_range_length, rand_gen(), 4);
+   }
+
+   bool has_range_finished() const noexcept
+   {
+      return m_counter >= m_total_range_length;
+   }
+
+   unsigned long get_ip() noexcept
+   {
+      auto val = rand_blackrock.shuffle(m_counter++);
+      return ntohl(range_lookup(val));
+   }
+
+   std::tuple<unsigned long, unsigned long> get_stats() const noexcept
+   {
+      return std::make_tuple(m_counter, m_total_range_length);
+   }
+   
+private:
+   struct range_t
+   {
+      range_t(unsigned long b, unsigned long e) : begin(b), end(e) {}
+      unsigned long begin;
+      unsigned long end;
+   };
+   
+   std::mt19937_64 rand_gen;
+   BlackRock rand_blackrock;
+   unsigned long m_counter = 0;
+   unsigned long m_total_range_length = 0;
+   std::vector<range_t> m_ipSpaceToSweep;
+
+   unsigned long range_lookup(unsigned long index) const noexcept
+   {
+      for (const auto& it : m_ipSpaceToSweep)
+      {
+         const unsigned long range_len = it.end - it.begin + 1;
+         if (index < range_len)
+            return it.begin + index;
+         else
+            index -= range_len;
+      }
+
+      assert(false);
+      return 0;
+   }
+};

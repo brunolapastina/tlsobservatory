@@ -82,10 +82,13 @@ public:
          fcntl(m_sock, F_SETFL, O_NONBLOCK);
       #endif
 
+      m_address = address;
+      m_port = port;
+
       sockaddr_in clientService;
       clientService.sin_family = AF_INET;
-      clientService.sin_addr.s_addr = address;
-      clientService.sin_port = htons(port);
+      clientService.sin_addr.s_addr = ntohl(m_address);
+      clientService.sin_port = htons(m_port);
 
       ret = ::connect(m_sock, reinterpret_cast<sockaddr*>(&clientService), sizeof(clientService));
       int err = WSAGetLastError();
@@ -107,6 +110,8 @@ public:
       closesocket(m_sock);
       m_sock = INVALID_SOCKET;
       m_ssl.reset();
+      m_recv_data.clear();
+      m_encoded_data.clear();
    }
 
    WSAPOLLFD get_pollfd() const noexcept
@@ -156,8 +161,6 @@ public:
             return true;
          }
 
-         m_recv_data.clear();
-         m_encoded_data.clear();
          lastStateChange = std::chrono::system_clock::now();
          m_state = State_e::WaitingReception;
          fda.revents = 0;
@@ -199,8 +202,9 @@ public:
    {
       unsigned long  ip;
       unsigned short port;
-      const char* data;
-      size_t data_len;
+      int            result;
+      const char*    data;
+      size_t         data_len;
    };
 
    conn_result_t get_result() noexcept
@@ -208,9 +212,10 @@ public:
       base64::encode(m_recv_data, m_encoded_data);
 
       conn_result_t ret;
-      ret.ip = 0;
-      ret.port = 443;
-      ret.data = m_encoded_data.data();
+      ret.ip       = m_address;
+      ret.port     = m_port;
+      ret.result   = 0;
+      ret.data     = m_encoded_data.data();
       ret.data_len = m_encoded_data.length();
 
       return ret;
@@ -223,6 +228,8 @@ private:
       WaitingReception,
    };
    
+   ULONG m_address = 0;
+   u_short m_port = 0;
    SOCKET m_sock = INVALID_SOCKET;
    SSL_ptr m_ssl;
    State_e  m_state = State_e::Connecting;

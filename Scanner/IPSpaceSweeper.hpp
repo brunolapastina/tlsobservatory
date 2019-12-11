@@ -10,7 +10,10 @@
 class IPSpaceSweeper
 {
 public:
-   IPSpaceSweeper() : rand_gen(std::random_device()()) {}
+   IPSpaceSweeper() : 
+      rand_gen(std::random_device()()),
+      rand_blackrock()
+   {}
 
    void add_range(const char* addr, unsigned char mask)
    {
@@ -57,8 +60,9 @@ public:
 
    unsigned long get_ip() noexcept
    {
-      auto val = rand_blackrock.shuffle(m_counter++);
-      return ntohl(range_lookup(val));
+      const auto val = rand_blackrock.shuffle(m_counter++);
+      const auto ret = range_lookup(static_cast<unsigned long>(val));
+      return ret;
    }
 
    std::tuple<unsigned long, unsigned long> get_stats() const noexcept

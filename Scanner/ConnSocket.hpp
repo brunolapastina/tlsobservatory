@@ -62,6 +62,8 @@ public:
       if (ret != 0)
       {
          printf("Error setting socket opt - LastError=%d\n", WSAGetLastError());
+         closesocket(m_sock);
+         m_sock = INVALID_SOCKET;
          return false;
       }
 
@@ -76,6 +78,8 @@ public:
          if (ret != NO_ERROR)
          {
             printf("ioctlsocket failed - LastError=%d\n", WSAGetLastError());
+            closesocket(m_sock);
+            m_sock = INVALID_SOCKET;
             return false;
          }
       #else
@@ -95,6 +99,8 @@ public:
       if ((ret != 0) && (err != WSAEWOULDBLOCK))
       {
          printf("Error connecting socket - ret=%d WSAGetLastError=%d\n", ret, err);
+         closesocket(m_sock);
+         m_sock = INVALID_SOCKET;
          return false;
       }
 
@@ -226,6 +232,12 @@ private:
    {
       Connecting,
       WaitingReception,
+   };
+
+   enum class Result_e
+   {
+      ConnectionFailed,
+      TLSError
    };
    
    ULONG m_address = 0;

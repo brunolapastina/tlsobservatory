@@ -4,7 +4,7 @@
 
 static constexpr char create_table_query[]
 {
-   "CREATE TABLE IF NOT EXISTS raw_data (ip INTEGER, port MEDIUMINT, result INTEGER, response VARCHAR)"
+   "CREATE TABLE IF NOT EXISTS raw_data (ip INTEGER, port MEDIUMINT, fetchTime UNSIGNED INTEGER, result INTEGER, response VARCHAR)"
 };
 
 static constexpr char begin_transaction_query[]
@@ -19,7 +19,7 @@ static constexpr char commit_transaction_query[]
 
 static constexpr char insert_record_query[]
 {
-   "INSERT INTO raw_data (ip, port, result, response) values (?, ?, ?, ?)"
+   "INSERT INTO raw_data (ip, port, fetchTime, result, response) values (?, ?, ?, ?, ?)"
 };
 
 class DataStore
@@ -127,14 +127,29 @@ public:
          return false;
       }
 
-      rc = sqlite3_bind_int64(m_insert_stml, 3, result);
+      SYSTEMTIME sysTime;
+      FILETIME   fileTime;
+      GetLocalTime(&sysTime);
+      SystemTimeToFileTime(&sysTime, &fileTime);
+      ULARGE_INTEGER timestamp;
+      timestamp.HighPart = fileTime.dwHighDateTime;
+      timestamp.LowPart = fileTime.dwLowDateTime;
+
+      rc = sqlite3_bind_int(m_insert_stml, 3, timestamp.QuadPart);
+      if (rc != SQLITE_OK)
+      {
+         printf("sqlite3_bind_int(port) error: %s\n", sqlite3_errmsg(m_db));
+         return false;
+      }
+
+      rc = sqlite3_bind_int64(m_insert_stml, 4, result);
       if (rc != SQLITE_OK)
       {
          printf("sqlite3_bind_int64(result) error: %s\n", sqlite3_errmsg(m_db));
          return false;
       }
 
-      rc = sqlite3_bind_text(m_insert_stml, 4, data, data_len, SQLITE_STATIC);
+      rc = sqlite3_bind_text(m_insert_stml, 5, data, data_len, SQLITE_STATIC);
       if (rc != SQLITE_OK)
       {
          printf("sqlite3_bind_text(response) error: %s\n", sqlite3_errmsg(m_db));

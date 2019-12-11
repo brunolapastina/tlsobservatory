@@ -13,7 +13,7 @@
 using SSL_CTX_ptr = std::unique_ptr<SSL_CTX, decltype(&SSL_CTX_free)>;
 using SSL_ptr = std::unique_ptr<SSL, decltype(&SSL_free)>;
 
-static const auto sock_timeout = std::chrono::milliseconds(5000);
+static constexpr auto sock_timeout = 5000;
 
 extern SSL_CTX_ptr g_ssl_ctx;
 
@@ -99,7 +99,7 @@ public:
       }
 
       m_state = State_e::Connecting;
-      lastStateChange = std::chrono::system_clock::now();
+      m_lastStateChange = GetTickCount64();
 
       return true;
    }
@@ -129,7 +129,7 @@ public:
    {
       if (fda.revents == 0)
       {  // Was not signaled. Did it timeout??
-         const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - lastStateChange);
+         const auto elapsed = (GetTickCount64() - m_lastStateChange);
          if (elapsed > sock_timeout)
          {
             //printf("Timeout\n");
@@ -161,7 +161,7 @@ public:
             return true;
          }
 
-         lastStateChange = std::chrono::system_clock::now();
+         m_lastStateChange = GetTickCount64();
          m_state = State_e::WaitingReception;
          fda.revents = 0;
          fda.events = POLLIN;
@@ -233,7 +233,7 @@ private:
    SOCKET m_sock = INVALID_SOCKET;
    SSL_ptr m_ssl;
    State_e  m_state = State_e::Connecting;
-   std::chrono::time_point<std::chrono::system_clock> lastStateChange;
+   ULONGLONG m_lastStateChange;
 
    std::vector<uint8_t> m_recv_data;
    std::string m_encoded_data;

@@ -11,12 +11,15 @@
 #include "IPSpaceSweeper.hpp"
 #include "DataStore.hpp"
 
+
 SSL_CTX_ptr g_ssl_ctx(nullptr, SSL_CTX_free);;
+
 
 static bool g_keep_running = true;
 
-BOOL consoleHandler(DWORD signal) {
 
+static BOOL consoleHandler(DWORD signal)
+{
    if (signal == CTRL_C_EVENT)
    {
       printf("Exiting...\n");
@@ -24,6 +27,7 @@ BOOL consoleHandler(DWORD signal) {
    }
    return true;
 }
+
 
 int main()
 {
@@ -45,7 +49,7 @@ int main()
 
    try
    {
-      const size_t concurrency = 10000;
+      const size_t concurrency = 5000;
       std::vector<ConnSocket> socks(concurrency);
       std::vector<WSAPOLLFD>  fdas(concurrency);
       IPSpaceSweeper ip_range;
@@ -57,8 +61,8 @@ int main()
 
       printf("Starting scan...\n");
 
-      const auto stat_interval = std::chrono::seconds(5);
-      const auto start = std::chrono::system_clock::now();
+      const auto stat_interval = 5000;
+      const auto start = GetTickCount64();
       auto last_stat = start;
 
       size_t returnedData = 0;
@@ -77,8 +81,7 @@ int main()
                //printf("Testing %d.%d.%d.%d\n", ip & 0x000000FF, (ip & 0x0000FF00) >> 8, (ip & 0x00FF0000) >> 16, (ip & 0xFF000000) >> 24);
                if (!socks[i].connect(ip, 443))
                {
-                  printf("Error connecting socket %zd\n", i);
-                  return -1;
+                  printf("Error connecting socket %zd to ip 0x%08X\n", i, ip);
                }
                else
                {
@@ -107,56 +110,63 @@ int main()
             printf("WSAPoll error - Error=%d\n", WSAGetLastError());
             break;
          }
-         else
+         
+         if (!datastore.begin())
          {
-            if (!datastore.begin())
-            {
-               printf("Error starting data store transaction\n");
-            }
+            printf("Error starting data store transaction\n");
+         }
 
-            for (int i = 0; i < socks.size(); ++i)
+         for (int i = 0; i < socks.size(); ++i)
+         {
+            if (socks[i].process_poll(fdas[i]))
             {
-               if (socks[i].process_poll(fdas[i]))
+               auto ret = socks[i].get_result();
+               if (ret.data_len > 0)
                {
-                  auto ret = socks[i].get_result();
-                  if (ret.data_len > 0)
+                  //printf("IP.%08X:%d  ->  Data(%zd)\n", ret.ip, ret.port, ret.data_len);
+                  if (!datastore.insert(ret.ip, ret.port, ret.result, ret.data, ret.data_len))
                   {
-                     //printf("IP.%08X:%d  ->  Data(%zd)\n", ret.ip, ret.port, ret.data_len);
-                     if (!datastore.insert(ret.ip, ret.port, ret.result, ret.data, ret.data_len))
-                     {
-                        printf("Error storing raw response\n");
-                     }
-                     ++returnedData;
+                     printf("Error storing raw response\n");
                   }
-                  socks[i].disconnect();
+                  ++returnedData;
                }
-            }
-
-            if (!datastore.commit())
-            {
-               printf("Error commiting data store transaction\n");
+               socks[i].disconnect();
             }
          }
 
-         if ((std::chrono::system_clock::now() - last_stat) >= stat_interval)
+         if (!datastore.commit())
+         {
+            printf("Error commiting data store transaction\n");
+         }
+
+         auto now = GetTickCount64();
+         if ((now - last_stat) >= stat_interval)
          {
             const auto [current, max_count] = ip_range.get_stats();
             const auto percentage = (100.0 * current) / max_count;
             const auto data_percentage = (100.0 * returnedData) / current;
-            const auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() - start);
-            const auto remaining = ((elapsed.count() * 100.0) / percentage) - elapsed.count();
+            const ULONGLONG elapsed = (now - start) / 1000;
+            const ULONGLONG remaining = ((elapsed * 100.0) / percentage) - elapsed;
+
+            const auto elapsed_sec = elapsed % 60;
+            const auto elapsed_min = (elapsed / 60) % 60;
+            const auto elapsed_hou = (elapsed / 3600);
+
+            const auto remaining_sec = remaining % 60;
+            const auto remaining_min = (remaining / 60) % 60;
+            const auto remaining_hou = (remaining / 3600);
 
             printf(  "\n******************** PROGRESS ********************\n"
                      "  Sweeped %u of %u addresses - %5.2f%%\n"
                      "  %zd IPs returned data - %5.2f%%\n"
-                     "  Elapsed %lld seconds\n"
-                     "  Estimated remaining time: %.0f seconds\n",
+                     "  Elapsed:   %4lldh %02lldmin %02llds\n"
+                     "  Remaining: %4lldh %02lldmin %02llds\n",
                      current, max_count, percentage,
                      returnedData, data_percentage,
-                     elapsed.count(),
-                     remaining );
+                     elapsed_hou, elapsed_min, elapsed_sec,
+                     remaining_hou, remaining_min, remaining_sec);
 
-            last_stat = std::chrono::system_clock::now();
+            last_stat = now;
          }
       }
 
@@ -165,12 +175,16 @@ int main()
       const auto [current, max_count] = ip_range.get_stats();
       const auto percentage = (100.0 * current) / max_count;
       const auto data_percentage = (100.0 * returnedData) / current;
-      const auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() - start);
+      const ULONGLONG elapsed = (GetTickCount64() - start)/1000;
+
+      const auto elapsed_sec = elapsed % 60;
+      const auto elapsed_min = (elapsed / 60) % 60;
+      const auto elapsed_hou = (elapsed / 3600);
 
       printf("\n******************** FINISHED ********************\n");
       printf("  Sweeped %u of %u addresses - %5.2f%%\n", current, max_count, percentage);
       printf("  %zd IPs returned data - %5.2f%%\n", returnedData, data_percentage);
-      printf("  Elapsed %lld seconds\n", elapsed.count());
+      printf("  Elapsed: %lldh %02lldmin %02llds\n", elapsed_hou, elapsed_min, elapsed_sec );
       printf("\n**************************************************\n");
    }
    catch (std::exception & e)

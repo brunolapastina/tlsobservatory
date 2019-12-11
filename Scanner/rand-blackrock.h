@@ -43,15 +43,15 @@ public:
    uint64_t unshuffle(uint64_t m) const noexcept;
 
 private:
-    uint64_t range;
-    uint64_t a;
-    uint64_t b;
-    uint64_t seed;
-    unsigned rounds;
-    uint64_t a_bits;
-    uint64_t a_mask;
-    uint64_t b_bits;
-    uint64_t b_mask;
+    uint64_t range = 0;
+    uint64_t a = 0;
+    uint64_t b = 0;
+    uint64_t seed = 0;
+    unsigned rounds = 0;
+    uint64_t a_bits = 0;
+    uint64_t a_mask = 0;
+    uint64_t b_bits = 0;
+    uint64_t b_mask = 0;
 };
 
 #endif

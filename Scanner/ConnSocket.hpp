@@ -10,6 +10,7 @@
    #define poll            WSAPoll
    #define pollfd          WSAPOLLFD
    #define SHUT_RDWR       SD_BOTH
+   #define WOULDBLOCK_DEF  WSAEWOULDBLOCK
 #else
    #include <sys/types.h>
    #include <sys/socket.h>
@@ -19,8 +20,9 @@
    #include <poll.h>
    #include <unistd.h>
    #include <fcntl.h>
-   #define INVALID_SOCKET -1
-   #define closesocket  close
+   #define INVALID_SOCKET  -1
+   #define closesocket     close
+   #define WOULDBLOCK_DEF  EWOULDBLOCK
    typedef int SOCKET;
    static inline auto WSAGetLastError() { return errno; }
    static unsigned long long GetTickCount64()
@@ -114,7 +116,7 @@ public:
 
       ret = ::connect(m_sock, reinterpret_cast<sockaddr*>(&clientService), sizeof(clientService));
       const auto err = WSAGetLastError();
-      if ((ret != 0) && (err != EWOULDBLOCK))
+      if ((ret != 0) && (err != WOULDBLOCK_DEF))
       {
          printf("Error connecting socket - ret=%d WSAGetLastError=%d\n", ret, err);
          closesocket(m_sock);

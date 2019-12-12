@@ -1,26 +1,39 @@
 #pragma once
 #include <stdexcept>
+#include <string_view>
 #include "sqlite3.h"
 
-static constexpr char create_table_query[]
-{
+static constexpr std::string_view query_create_table{
    "CREATE TABLE IF NOT EXISTS raw_data (ip INTEGER, port MEDIUMINT, fetchTime UNSIGNED INTEGER, result INTEGER, response VARCHAR)"
 };
 
-static constexpr char begin_transaction_query[]
-{
-   "BEGIN"
-};
+static constexpr std::string_view query_begin_transaction{ "BEGIN" };
 
-static constexpr char commit_transaction_query[]
-{
-   "COMMIT"
-};
+static constexpr std::string_view query_commit_transaction{ "COMMIT" };
 
-static constexpr char insert_record_query[]
-{
+static constexpr std::string_view query_insert_record{
    "INSERT INTO raw_data (ip, port, fetchTime, result, response) values (?, ?, ?, ?, ?)"
 };
+
+
+static unsigned long long GetTimstamp()
+{
+#ifdef _WIN32
+   SYSTEMTIME sysTime;
+   FILETIME   fileTime;
+   GetLocalTime(&sysTime);
+   SystemTimeToFileTime(&sysTime, &fileTime);
+   ULARGE_INTEGER timestamp;
+   timestamp.HighPart = fileTime.dwHighDateTime;
+   timestamp.LowPart = fileTime.dwLowDateTime;
+
+   return timestamp.QuadPart;
+#else
+   #error GetTimstamp not implemented
+   return 0;
+#endif
+}
+
 
 class DataStore
 {
@@ -33,25 +46,25 @@ public:
          throw std::runtime_error(std::string("Can't open database: ") + sqlite3_errmsg(m_db));
       }
 
-      rc = sqlite3_exec( m_db, create_table_query, nullptr, nullptr, nullptr );
+      rc = sqlite3_exec( m_db, query_create_table.data(), nullptr, nullptr, nullptr );
       if (rc != SQLITE_OK)
       {
          throw std::runtime_error(std::string("sqlite3_exec(create table) error: ") + sqlite3_errmsg(m_db));
       }
 
-      rc = sqlite3_prepare_v2(m_db, begin_transaction_query, strlen(begin_transaction_query), &m_begin_stml, nullptr);
+      rc = sqlite3_prepare_v2(m_db, query_begin_transaction.data(), static_cast<int>(query_begin_transaction.size()), &m_begin_stml, nullptr);
       if (rc != SQLITE_OK)
       {
          throw std::runtime_error(std::string("sqlite3_prepare_v2(begin) error: ") + sqlite3_errmsg(m_db));
       }
 
-      rc = sqlite3_prepare_v2(m_db, commit_transaction_query, strlen(commit_transaction_query), &m_commit_stml, nullptr);
+      rc = sqlite3_prepare_v2(m_db, query_commit_transaction.data(), static_cast<int>(query_commit_transaction.size()), &m_commit_stml, nullptr);
       if (rc != SQLITE_OK)
       {
          throw std::runtime_error(std::string("sqlite3_prepare_v2(commit) error: ") + sqlite3_errmsg(m_db));
       }
 
-      rc = sqlite3_prepare_v2(m_db, insert_record_query, strlen(insert_record_query), &m_insert_stml, nullptr);
+      rc = sqlite3_prepare_v2(m_db, query_insert_record.data(), static_cast<int>(query_insert_record.size()), &m_insert_stml, nullptr);
       if (rc != SQLITE_OK)
       {
          throw std::runtime_error(std::string("sqlite3_prepare_v2(insert) error: ") + sqlite3_errmsg(m_db));
@@ -127,15 +140,7 @@ public:
          return false;
       }
 
-      SYSTEMTIME sysTime;
-      FILETIME   fileTime;
-      GetLocalTime(&sysTime);
-      SystemTimeToFileTime(&sysTime, &fileTime);
-      ULARGE_INTEGER timestamp;
-      timestamp.HighPart = fileTime.dwHighDateTime;
-      timestamp.LowPart = fileTime.dwLowDateTime;
-
-      rc = sqlite3_bind_int(m_insert_stml, 3, timestamp.QuadPart);
+      rc = sqlite3_bind_int64(m_insert_stml, 3, GetTimstamp());
       if (rc != SQLITE_OK)
       {
          printf("sqlite3_bind_int(port) error: %s\n", sqlite3_errmsg(m_db));
@@ -149,7 +154,7 @@ public:
          return false;
       }
 
-      rc = sqlite3_bind_text(m_insert_stml, 5, data, data_len, SQLITE_STATIC);
+      rc = sqlite3_bind_text(m_insert_stml, 5, data, static_cast<int>(data_len), SQLITE_STATIC);
       if (rc != SQLITE_OK)
       {
          printf("sqlite3_bind_text(response) error: %s\n", sqlite3_errmsg(m_db));

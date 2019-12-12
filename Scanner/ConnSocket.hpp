@@ -5,7 +5,35 @@
 #include <string>
 #include <cmath>
 #include <system_error>
-#include <WinSock2.h>
+#ifdef _WIN32
+   #include <WinSock2.h>
+   #define poll            WSAPoll
+   #define pollfd          WSAPOLLFD
+   #define SHUT_RDWR       SD_BOTH
+#else
+   #include <sys/types.h>
+   #include <sys/socket.h>
+   #include <netinet/in.h>
+   #include <netinet/tcp.h>
+   #include <arpa/inet.h>
+   #include <poll.h>
+   #include <unistd.h>
+   #include <fcntl.h>
+   #define INVALID_SOCKET -1
+   #define closesocket  close
+   typedef int SOCKET;
+   static inline auto WSAGetLastError() { return errno; }
+   static unsigned long long GetTickCount64()
+   {
+      static_assert(sizeof(std::time_t) == 8, "time_t variable is not 64 bits");
+      struct timespec ts;
+      clock_gettime( CLOCK_MONOTONIC, &ts );
+      unsigned long long ticks  = ts.tv_nsec / 1000000;
+      ticks += ts.tv_sec * 1000;
+      return ticks;
+   }
+#endif
+
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 #include "base64.h"
@@ -17,16 +45,6 @@ static constexpr auto sock_timeout = 5000;
 
 extern SSL_CTX_ptr g_ssl_ctx;
 
-static void dump(const char* data, const int len)
-{
-   for (int i = 0; i < len; ++i)
-   {
-      printf("%02X ", (unsigned char)data[i]);
-   }
-   printf("\n\n");
-}
-
-
 class ConnSocket
 {
 public:
@@ -35,7 +53,8 @@ public:
    ConnSocket& operator=(const ConnSocket&) = delete;
    ConnSocket& operator=(ConnSocket&&) = default;
 
-   ConnSocket() : m_ssl(nullptr, SSL_free)
+   ConnSocket() : m_ssl(nullptr, SSL_free),
+                  m_lastStateChange{ 0 }
    {
       m_recv_data.reserve(6 * 1024);
       m_encoded_data.reserve(8 * 1024);   // Base64 data is 4/3 larger
@@ -46,7 +65,7 @@ public:
       return (m_sock != INVALID_SOCKET);
    }
 
-   bool connect(ULONG address, u_short port) noexcept
+   bool connect(unsigned long address, unsigned short port) noexcept
    {
       int ret;
 
@@ -57,23 +76,22 @@ public:
          return false;
       }
 
-      LINGER lin{ 0,0 };
-      ret = setsockopt(m_sock, SOL_SOCKET, SO_LINGER, (const char*)&lin, sizeof(lin));
-      if (ret != 0)
-      {
-         printf("Error setting socket opt - LastError=%d\n", WSAGetLastError());
-         closesocket(m_sock);
-         m_sock = INVALID_SOCKET;
-         return false;
-      }
-
       #ifdef _WIN32
+         LINGER lin{ 0,0 };
+         ret = setsockopt(m_sock, SOL_SOCKET, SO_LINGER, (const char*)&lin, sizeof(lin));
+         if (ret != 0)
+         {
+            printf("Error setting socket opt - LastError=%d\n", WSAGetLastError());
+            closesocket(m_sock);
+            m_sock = INVALID_SOCKET;
+            return false;
+         }
+
          // Set the socket I/O mode: In this case FIONBIO enables or disables the 
          // blocking mode for the socket based on the numerical value of iMode.
          // If iMode = 0, blocking is enabled; 
          // If iMode != 0, non-blocking mode is enabled.
-
-         u_long iMode = 1;
+         unsigned long iMode = 1;
          ret = ioctlsocket(m_sock, FIONBIO, &iMode);
          if (ret != NO_ERROR)
          {
@@ -95,8 +113,8 @@ public:
       clientService.sin_port = htons(m_port);
 
       ret = ::connect(m_sock, reinterpret_cast<sockaddr*>(&clientService), sizeof(clientService));
-      int err = WSAGetLastError();
-      if ((ret != 0) && (err != WSAEWOULDBLOCK))
+      const auto err = WSAGetLastError();
+      if ((ret != 0) && (err != EWOULDBLOCK))
       {
          printf("Error connecting socket - ret=%d WSAGetLastError=%d\n", ret, err);
          closesocket(m_sock);
@@ -112,7 +130,7 @@ public:
 
    void disconnect() noexcept
    {
-      shutdown(m_sock, SD_BOTH);
+      shutdown(m_sock, SHUT_RDWR);
       closesocket(m_sock);
       m_sock = INVALID_SOCKET;
       m_ssl.reset();
@@ -120,9 +138,9 @@ public:
       m_encoded_data.clear();
    }
 
-   WSAPOLLFD get_pollfd() const noexcept
+   pollfd get_pollfd() const noexcept
    {
-      return { m_sock, (m_state == State_e::Connecting) ? POLLOUT : POLLIN, 0 };
+      return { m_sock, static_cast<short>((m_state == State_e::Connecting) ? POLLOUT : POLLIN), 0 };
    }
 
 
@@ -131,7 +149,7 @@ public:
     *    true when it is done comunicating with the socket
     *    false if there communication is still going on
     **/
-   bool process_poll(WSAPOLLFD& fda)
+   bool process_poll(pollfd& fda)
    {
       if (fda.revents == 0)
       {  // Was not signaled. Did it timeout??
@@ -181,9 +199,6 @@ public:
          if (read > 0)
          {
             m_recv_data.insert(m_recv_data.end(), outbuf, outbuf + read);
-            //printf("recv(%d) => ", read);
-            //dump(outbuf, read);
-
             BIO_write(SSL_get_rbio(m_ssl.get()), outbuf, read);
          }
 
@@ -240,12 +255,12 @@ private:
       TLSError
    };
    
-   ULONG m_address = 0;
+   unsigned long m_address = 0;
    u_short m_port = 0;
    SOCKET m_sock = INVALID_SOCKET;
    SSL_ptr m_ssl;
    State_e  m_state = State_e::Connecting;
-   ULONGLONG m_lastStateChange;
+   unsigned long long m_lastStateChange;
 
    std::vector<uint8_t> m_recv_data;
    std::string m_encoded_data;
@@ -253,7 +268,7 @@ private:
    bool send(const char* data, int len) noexcept
    {
       int ret = ::send(m_sock, data, len, 0);
-      int err = WSAGetLastError();
+      const auto err = WSAGetLastError();
       if (ret != len)
       {
          printf("Error sending data - ret=%d WSAGetLastError=%d\n", ret, err);

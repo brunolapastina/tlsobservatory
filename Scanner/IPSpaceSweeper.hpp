@@ -22,7 +22,7 @@ public:
 
    void add_range(unsigned long ip, unsigned char mask)
    {
-      printf("%d.%d.%d.%d/%d  =>  ", ip & 0x000000FF, (ip & 0x0000FF00) >> 8, (ip & 0x00FF0000) >> 16, (ip & 0xFF000000) >> 24, mask);
+      printf("%lu.%lu.%lu.%lu/%u  =>  ", ip & 0x000000FF, (ip & 0x0000FF00) >> 8, (ip & 0x00FF0000) >> 16, (ip & 0xFF000000) >> 24, mask);
 
       if (mask > 32)
       {
@@ -40,7 +40,7 @@ public:
       }
 
       unsigned long range_size = (~ip_mask) - 1;
-      printf("range_size = %u\n", range_size);
+      printf("range_size = %lu\n", range_size);
 
       m_total_range_length += range_size;
 

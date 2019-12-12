@@ -4,7 +4,6 @@
 #include <memory>
 #include <vector>
 #include <algorithm>
-#include <WinSock2.h>
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 #include "ConnSocket.hpp"
@@ -18,44 +17,52 @@ SSL_CTX_ptr g_ssl_ctx(nullptr, SSL_CTX_free);;
 static bool g_keep_running = true;
 
 
-static BOOL consoleHandler(DWORD signal)
-{
-   if (signal == CTRL_C_EVENT)
+#ifdef _WIN32
+   static BOOL consoleHandler(DWORD signal)
    {
-      printf("Exiting...\n");
-      g_keep_running = false;
+      if (signal == CTRL_C_EVENT)
+      {
+         printf("Exiting...\n");
+         g_keep_running = false;
+      }
+      return true;
    }
-   return true;
-}
+#else
+   
+#endif
 
 
 int main()
 {
-   SetConsoleCtrlHandler(consoleHandler, TRUE);
+   #ifdef _WIN32
+      SetConsoleCtrlHandler(consoleHandler, TRUE);
+
+      WSADATA wsaData = { 0 };
+      int iRet = WSAStartup(MAKEWORD(2, 2), &wsaData);
+      if (iRet != 0)
+      {
+         wprintf(L"WSAStartup failed: %d\n", iRet);
+         return 1;
+      }
+   #endif
 
    SSL_library_init();
    SSLeay_add_ssl_algorithms();
    SSL_load_error_strings();
 
-   g_ssl_ctx.reset(SSL_CTX_new(SSLv23_client_method()));
+   sqlite3_initialize();
 
-   WSADATA wsaData = { 0 };
-   int iRet = WSAStartup(MAKEWORD(2, 2), &wsaData);
-   if (iRet != 0)
-   {
-      wprintf(L"WSAStartup failed: %d\n", iRet);
-      return 1;
-   }
+   g_ssl_ctx.reset(SSL_CTX_new(SSLv23_client_method()));
 
    try
    {
       const size_t concurrency = 5000;
       std::vector<ConnSocket> socks(concurrency);
-      std::vector<WSAPOLLFD>  fdas(concurrency);
+      std::vector<pollfd>  fdas(concurrency);
       IPSpaceSweeper ip_range;
 
       //ip_range.add_range("200.147.118.0", 24);
-      ip_range.add_range("200.0.0.0", 8);
+      ip_range.add_range("200.0.0.0", 7);
 
       DataStore datastore;
 
@@ -81,7 +88,7 @@ int main()
                //printf("Testing %d.%d.%d.%d\n", ip & 0x000000FF, (ip & 0x0000FF00) >> 8, (ip & 0x00FF0000) >> 16, (ip & 0xFF000000) >> 24);
                if (!socks[i].connect(ip, 443))
                {
-                  printf("Error connecting socket %zd to ip 0x%08X\n", i, ip);
+                  printf("Error connecting socket %zd to ip 0x%08lX\n", i, ip);
                }
                else
                {
@@ -99,12 +106,12 @@ int main()
 
          socks.erase(std::remove_if(socks.begin(), socks.end(), [](const auto& it) {return !it.is_connected(); }), socks.end());
          fdas.resize(socks.size());
-         for (int i = 0; i < socks.size(); ++i)
+         for (size_t i = 0; i < socks.size(); ++i)
          {
             fdas[i] = socks[i].get_pollfd();
          }
 
-         int ret = WSAPoll(fdas.data(), static_cast<ULONG>(fdas.size()), 100);
+         int ret = poll(fdas.data(), static_cast<unsigned long>(fdas.size()), 100);
          if (ret < 0)
          {
             printf("WSAPoll error - Error=%d\n", WSAGetLastError());
@@ -116,14 +123,13 @@ int main()
             printf("Error starting data store transaction\n");
          }
 
-         for (int i = 0; i < socks.size(); ++i)
+         for (size_t i = 0; i < socks.size(); ++i)
          {
             if (socks[i].process_poll(fdas[i]))
             {
                auto ret = socks[i].get_result();
                if (ret.data_len > 0)
                {
-                  //printf("IP.%08X:%d  ->  Data(%zd)\n", ret.ip, ret.port, ret.data_len);
                   if (!datastore.insert(ret.ip, ret.port, ret.result, ret.data, ret.data_len))
                   {
                      printf("Error storing raw response\n");
@@ -139,14 +145,14 @@ int main()
             printf("Error commiting data store transaction\n");
          }
 
-         auto now = GetTickCount64();
+         const auto now = GetTickCount64();
          if ((now - last_stat) >= stat_interval)
          {
             const auto [current, max_count] = ip_range.get_stats();
             const auto percentage = (100.0 * current) / max_count;
             const auto data_percentage = (100.0 * returnedData) / current;
-            const ULONGLONG elapsed = (now - start) / 1000;
-            const ULONGLONG remaining = ((elapsed * 100.0) / percentage) - elapsed;
+            const unsigned long long elapsed = (now - start) / 1000;
+            const unsigned long long remaining = static_cast<unsigned long long>(((elapsed * 100) / percentage) - elapsed);
 
             const auto elapsed_sec = elapsed % 60;
             const auto elapsed_min = (elapsed / 60) % 60;
@@ -157,7 +163,7 @@ int main()
             const auto remaining_hou = (remaining / 3600);
 
             printf(  "\n******************** PROGRESS ********************\n"
-                     "  Sweeped %u of %u addresses - %5.2f%%\n"
+                     "  Sweeped %lu of %lu addresses - %5.2f%%\n"
                      "  %zd IPs returned data - %5.2f%%\n"
                      "  Elapsed:   %4lldh %02lldmin %02llds\n"
                      "  Remaining: %4lldh %02lldmin %02llds\n",
@@ -175,14 +181,14 @@ int main()
       const auto [current, max_count] = ip_range.get_stats();
       const auto percentage = (100.0 * current) / max_count;
       const auto data_percentage = (100.0 * returnedData) / current;
-      const ULONGLONG elapsed = (GetTickCount64() - start)/1000;
+      const unsigned long long elapsed = (GetTickCount64() - start) / 1000;
 
       const auto elapsed_sec = elapsed % 60;
       const auto elapsed_min = (elapsed / 60) % 60;
       const auto elapsed_hou = (elapsed / 3600);
 
       printf("\n******************** FINISHED ********************\n");
-      printf("  Sweeped %u of %u addresses - %5.2f%%\n", current, max_count, percentage);
+      printf("  Sweeped %lu of %lu addresses - %5.2f%%\n", current, max_count, percentage);
       printf("  %zd IPs returned data - %5.2f%%\n", returnedData, data_percentage);
       printf("  Elapsed: %lldh %02lldmin %02llds\n", elapsed_hou, elapsed_min, elapsed_sec );
       printf("\n**************************************************\n");
@@ -192,9 +198,12 @@ int main()
       printf("EXCEPTION: %s\n", e.what());
    }
 
-   WSACleanup();
+   sqlite3_shutdown();
 
-   system("pause");
+   #ifdef _WIN32
+      WSACleanup();
+      system("pause");
+   #endif
 
    return 0;
 }

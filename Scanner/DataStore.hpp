@@ -2,6 +2,7 @@
 #include <stdexcept>
 #include <string_view>
 #include "sqlite3.h"
+#include "ConnSocket.hpp"
 
 static constexpr std::string_view query_create_table{
    "CREATE TABLE IF NOT EXISTS raw_data (ip INTEGER, port MEDIUMINT, fetchTime UNSIGNED INTEGER, result INTEGER, response BLOB)"
@@ -124,8 +125,13 @@ public:
       return true;
    }
 
-   bool insert(unsigned long ip, unsigned short port, int result, const uint8_t* data, size_t data_len)
+   bool insert(unsigned long ip, unsigned short port, ConnSocket::Result_e result, const uint8_t* data, size_t data_len)
    {
+      if (result == ConnSocket::Result_e::TCPHandshakeTimeout)
+      {  // Does not store host that didn't answer
+         return true;
+      }
+
       int rc = sqlite3_bind_int64(m_insert_stml, 1, ip);
       if (rc != SQLITE_OK)
       {
@@ -147,7 +153,7 @@ public:
          return false;
       }
 
-      rc = sqlite3_bind_int64(m_insert_stml, 4, result);
+      rc = sqlite3_bind_int64(m_insert_stml, 4, static_cast<int>(result));
       if (rc != SQLITE_OK)
       {
          printf("sqlite3_bind_int64(result) error: %s\n", sqlite3_errmsg(m_db));

@@ -69,6 +69,8 @@ public:
    {
       int ret;
 
+      m_currentResult = Result_e::TCPHandshakeTimeout;
+
       m_sock = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
       if (m_sock == INVALID_SOCKET)
       {
@@ -114,12 +116,23 @@ public:
 
       ret = ::connect(m_sock, reinterpret_cast<sockaddr*>(&clientService), sizeof(clientService));
       const auto err = WSAGetLastError();
-      if ((ret != 0) && (err != WOULDBLOCK_DEF))
+      if (ret != 0)
       {
-         printf("Error connecting socket - ret=%d WSAGetLastError=%d\n", ret, err);
-         closesocket(m_sock);
-         m_sock = INVALID_SOCKET;
-         return false;
+         if (err == WSAECONNRESET)
+         {
+            m_currentResult = Result_e::TCPHandshakeReset;
+            printf("Connection to %08X Reseted\n", m_port);
+            closesocket(m_sock);
+            m_sock = INVALID_SOCKET;
+            return false;
+         }
+         else if (err != WOULDBLOCK_DEF)
+         {
+            printf("Error connecting socket - ret=%d WSAGetLastError=%d\n", ret, err);
+            closesocket(m_sock);
+            m_sock = INVALID_SOCKET;
+            return false;
+         }
       }
 
       m_state = State_e::Connecting;
@@ -155,7 +168,7 @@ public:
          const auto elapsed = (GetTickCount64() - m_lastStateChange);
          if (elapsed > sock_timeout)
          {
-            //printf("Timeout\n");
+            m_currentResult = ((m_state == State_e::Connecting) ? Result_e::TCPHandshakeTimeout : Result_e::TLSHandshakeTimeout);
             return true;
          }
          else
@@ -180,7 +193,6 @@ public:
 
          if (!send(outbuf, read))
          {
-            printf("Error sending data\n");
             return true;
          }
 
@@ -203,26 +215,45 @@ public:
 
          SSL_do_handshake(m_ssl.get());
          fda.revents = 0;
-         
-         return (0 != BIO_pending(SSL_get_wbio(m_ssl.get())));
+
+         if (0 != BIO_pending(SSL_get_wbio(m_ssl.get())))
+         {
+            m_currentResult = Result_e::TLSHandshakeCompleted;
+            return true;
+         }
+         else
+         {
+            return false;
+         }
       }
       else if (fda.revents & POLLHUP)
       {
+         m_currentResult = ((m_state == State_e::Connecting) ? Result_e::TCPHandshakeReset : Result_e::TLSHandshakeReset);
          return true;
       }
       else
       {
          printf("Signaled incorrectly\n");
-         std::abort();
+         system("pause");
          return true;
       }
    }
+
+   enum class Result_e
+   {
+      TCPHandshakeTimeout = 0,
+      TCPHandshakeReset = 1,
+      TCPHandshakeCompleted = 2,
+      TLSHandshakeTimeout = 3,
+      TLSHandshakeReset = 4,
+      TLSHandshakeCompleted = 5,
+   };
 
    struct conn_result_t
    {
       unsigned long  ip;
       unsigned short port;
-      int            result;
+      Result_e       result;
       const uint8_t* data;
       size_t         data_len;
    };
@@ -232,7 +263,7 @@ public:
       conn_result_t ret;
       ret.ip       = m_address;
       ret.port     = m_port;
-      ret.result   = 0;
+      ret.result   = m_currentResult;
       ret.data     = m_recv_data.data();
       ret.data_len = m_recv_data.size();
 
@@ -245,18 +276,13 @@ private:
       Connecting,
       WaitingReception,
    };
-
-   enum class Result_e
-   {
-      ConnectionFailed,
-      TLSError
-   };
    
    unsigned long m_address = 0;
-   u_short m_port = 0;
-   SOCKET m_sock = INVALID_SOCKET;
-   SSL_ptr m_ssl;
-   State_e  m_state = State_e::Connecting;
+   u_short  m_port   = 0;
+   SOCKET   m_sock   = INVALID_SOCKET;
+   SSL_ptr  m_ssl; 
+   State_e  m_state  = State_e::Connecting;
+   Result_e m_currentResult = Result_e::TCPHandshakeTimeout;
    unsigned long long m_lastStateChange;
 
    std::vector<uint8_t> m_recv_data;
@@ -267,6 +293,10 @@ private:
       const auto err = WSAGetLastError();
       if (ret != len)
       {
+         if (err == WSAECONNRESET)
+         {
+            m_currentResult = Result_e::TLSHandshakeReset;
+         }
          printf("Error sending data - ret=%d WSAGetLastError=%d\n", ret, err);
          return false;
       }

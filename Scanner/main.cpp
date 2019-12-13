@@ -62,7 +62,7 @@ int main()
       IPSpaceSweeper ip_range;
 
       //ip_range.add_range("200.147.118.0", 24);
-      ip_range.add_range("200.0.0.0", 7);
+      ip_range.add_range("200.0.0.0", 6);
 
       DataStore datastore;
 
@@ -89,6 +89,11 @@ int main()
                if (!socks[i].connect(ip, 443))
                {
                   printf("Error connecting socket %zd to ip 0x%08lX\n", i, ip);
+                  const auto ret = socks[i].get_result();
+                  if (!datastore.insert(ret.ip, ret.port, ret.result, ret.data, ret.data_len))
+                  {
+                     printf("Error storing raw response\n");
+                  }
                }
                else
                {
@@ -127,13 +132,14 @@ int main()
          {
             if (socks[i].process_poll(fdas[i]))
             {
-               auto ret = socks[i].get_result();
-               if (ret.data_len > 0)
+               const auto ret = socks[i].get_result();
+               if (!datastore.insert(ret.ip, ret.port, ret.result, ret.data, ret.data_len))
                {
-                  if (!datastore.insert(ret.ip, ret.port, ret.result, ret.data, ret.data_len))
-                  {
-                     printf("Error storing raw response\n");
-                  }
+                  printf("Error storing raw response\n");
+               }
+
+               if (ret.result == ConnSocket::Result_e::TLSHandshakeCompleted)
+               {
                   ++returnedData;
                }
                socks[i].disconnect();

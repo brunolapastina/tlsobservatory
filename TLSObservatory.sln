@@ -5,22 +5,22 @@ VisualStudioVersion = 16.0.29519.87
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Scanner", "Scanner\Scanner.vcxproj", "{10FBCD0B-F50D-49B7-A773-B06A77D57B1B}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Parser", "Parser\Parser.vcxproj", "{61112BFD-363C-46DC-8C8C-0A33919CFE9E}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
-		Debug|x86 = Debug|x86
 		Release|x64 = Release|x64
-		Release|x86 = Release|x86
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
 		{10FBCD0B-F50D-49B7-A773-B06A77D57B1B}.Debug|x64.ActiveCfg = Debug|x64
 		{10FBCD0B-F50D-49B7-A773-B06A77D57B1B}.Debug|x64.Build.0 = Debug|x64
-		{10FBCD0B-F50D-49B7-A773-B06A77D57B1B}.Debug|x86.ActiveCfg = Debug|Win32
-		{10FBCD0B-F50D-49B7-A773-B06A77D57B1B}.Debug|x86.Build.0 = Debug|Win32
 		{10FBCD0B-F50D-49B7-A773-B06A77D57B1B}.Release|x64.ActiveCfg = Release|x64
 		{10FBCD0B-F50D-49B7-A773-B06A77D57B1B}.Release|x64.Build.0 = Release|x64
-		{10FBCD0B-F50D-49B7-A773-B06A77D57B1B}.Release|x86.ActiveCfg = Release|Win32
-		{10FBCD0B-F50D-49B7-A773-B06A77D57B1B}.Release|x86.Build.0 = Release|Win32
+		{61112BFD-363C-46DC-8C8C-0A33919CFE9E}.Debug|x64.ActiveCfg = Debug|x64
+		{61112BFD-363C-46DC-8C8C-0A33919CFE9E}.Debug|x64.Build.0 = Debug|x64
+		{61112BFD-363C-46DC-8C8C-0A33919CFE9E}.Release|x64.ActiveCfg = Release|x64
+		{61112BFD-363C-46DC-8C8C-0A33919CFE9E}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

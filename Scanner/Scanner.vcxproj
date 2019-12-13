@@ -91,7 +91,7 @@
       <SDLCheck>true</SDLCheck>
       <ConformanceMode>true</ConformanceMode>
       <PreprocessorDefinitions>WIN32_LEAN_AND_MEAN;SQLITE_OMIT_DEPRECATED;SQLITE_TEMP_STORE=2;SQLITE_THREADSAFE=2;SQLITE_OMIT_DECLTYPE;SQLITE_USE_ALLOCA;SQLITE_LIKE_DOESNT_MATCH_BLOBS;SQLITE_OMIT_AUTOINIT;SQLITE_OMIT_AUTORESET;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>C:\Program Files\OpenSSL-Win64\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\Common;C:\Program Files\OpenSSL-Win64\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
@@ -127,7 +127,7 @@
       <SDLCheck>true</SDLCheck>
       <ConformanceMode>true</ConformanceMode>
       <PreprocessorDefinitions>WIN32_LEAN_AND_MEAN;SQLITE_OMIT_DEPRECATED;SQLITE_TEMP_STORE=2;SQLITE_THREADSAFE=2;SQLITE_OMIT_DECLTYPE;SQLITE_USE_ALLOCA;SQLITE_LIKE_DOESNT_MATCH_BLOBS;SQLITE_OMIT_AUTOINIT;SQLITE_OMIT_AUTORESET;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>C:\Program Files\OpenSSL-Win64\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\Common;C:\Program Files\OpenSSL-Win64\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
@@ -139,16 +139,16 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="..\Common\sqlite3.c" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="rand-blackrock.cpp" />
-    <ClCompile Include="sqlite3.c" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\Common\sqlite3.h" />
     <ClInclude Include="ConnSocket.hpp" />
     <ClInclude Include="DataStore.hpp" />
     <ClInclude Include="IPSpaceSweeper.hpp" />
     <ClInclude Include="rand-blackrock.h" />
-    <ClInclude Include="sqlite3.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

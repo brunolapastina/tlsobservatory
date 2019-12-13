@@ -21,7 +21,7 @@
     <ClCompile Include="rand-blackrock.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="sqlite3.c">
+    <ClCompile Include="..\Common\sqlite3.c">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -38,7 +38,7 @@
     <ClInclude Include="DataStore.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="sqlite3.h">
+    <ClInclude Include="..\Common\sqlite3.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

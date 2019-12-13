@@ -21,9 +21,6 @@
     <ClCompile Include="rand-blackrock.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="base64.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="sqlite3.c">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -36,9 +33,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="rand-blackrock.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="base64.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="DataStore.hpp">

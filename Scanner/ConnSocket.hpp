@@ -38,7 +38,6 @@
 
 #include <openssl/ssl.h>
 #include <openssl/err.h>
-#include "base64.h"
 
 using SSL_CTX_ptr = std::unique_ptr<SSL_CTX, decltype(&SSL_CTX_free)>;
 using SSL_ptr = std::unique_ptr<SSL, decltype(&SSL_free)>;
@@ -59,7 +58,6 @@ public:
                   m_lastStateChange{ 0 }
    {
       m_recv_data.reserve(6 * 1024);
-      m_encoded_data.reserve(8 * 1024);   // Base64 data is 4/3 larger
    }
 
    bool is_connected() const noexcept
@@ -137,7 +135,6 @@ public:
       m_sock = INVALID_SOCKET;
       m_ssl.reset();
       m_recv_data.clear();
-      m_encoded_data.clear();
    }
 
    pollfd get_pollfd() const noexcept
@@ -226,20 +223,18 @@ public:
       unsigned long  ip;
       unsigned short port;
       int            result;
-      const char*    data;
+      const uint8_t* data;
       size_t         data_len;
    };
 
    conn_result_t get_result() noexcept
    {
-      base64::encode(m_recv_data, m_encoded_data);
-
       conn_result_t ret;
       ret.ip       = m_address;
       ret.port     = m_port;
       ret.result   = 0;
-      ret.data     = m_encoded_data.data();
-      ret.data_len = m_encoded_data.length();
+      ret.data     = m_recv_data.data();
+      ret.data_len = m_recv_data.size();
 
       return ret;
    }
@@ -265,7 +260,6 @@ private:
    unsigned long long m_lastStateChange;
 
    std::vector<uint8_t> m_recv_data;
-   std::string m_encoded_data;
 
    bool send(const char* data, int len) noexcept
    {

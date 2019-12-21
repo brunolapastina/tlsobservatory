@@ -15,6 +15,14 @@ public:
       rand_blackrock()
    {}
 
+   IPSpaceSweeper(const IPSpaceSweeper& rhs) :
+      rand_gen(rhs.rand_gen),
+      rand_blackrock(rhs.rand_blackrock),
+      m_counter(rhs.m_counter),
+      m_total_range_length(rhs.m_total_range_length),
+      m_ipSpaceToSweep(rhs.m_ipSpaceToSweep)
+   {}
+
    void add_range(const char* addr, unsigned char mask)
    {
       add_range(inet_addr(addr), mask);
@@ -51,6 +59,24 @@ public:
          });
 
       rand_blackrock = BlackRock(m_total_range_length, rand_gen(), 4);
+   }
+
+   IPSpaceSweeper get_slice(size_t num_of_slices, size_t index)
+   {
+      IPSpaceSweeper slice(*this);
+
+      const size_t slice_size = m_total_range_length / num_of_slices;
+
+      slice.m_counter = index * slice_size;
+
+      if (index < num_of_slices - 1)
+      {  // Change the end only if it is not the last slice
+         slice.m_total_range_length = slice.m_counter + slice_size;
+      }
+
+      printf("Slice %zd of %zd - begin=%u  end=%u\n", index, num_of_slices, slice.m_counter, slice.m_total_range_length);
+
+      return slice;
    }
 
    bool has_range_finished() const noexcept

@@ -1,6 +1,7 @@
 #pragma once
 #include <stdexcept>
 #include <string_view>
+#include <mutex>
 #include "sqlite3.h"
 #include "ConnSocket.hpp"
 
@@ -97,10 +98,12 @@ public:
 
    bool begin()
    {
+      m_transaction_lock.lock();
       int rc = sqlite3_step(m_begin_stml);
       if (SQLITE_DONE != rc)
       {
          printf("sqlite3_step(begin) error: %s\n", sqlite3_errmsg(m_db));
+         m_transaction_lock.unlock();
          return false;
       }
 
@@ -121,6 +124,8 @@ public:
 
       sqlite3_clear_bindings(m_commit_stml);
       sqlite3_reset(m_commit_stml);
+
+      m_transaction_lock.unlock();
 
       return true;
    }
@@ -181,6 +186,7 @@ public:
    }
 
 private:
+   std::mutex m_transaction_lock;
    sqlite3* m_db = nullptr;
    sqlite3_stmt* m_insert_stml = nullptr;
    sqlite3_stmt* m_begin_stml = nullptr;

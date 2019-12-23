@@ -11,7 +11,7 @@
 #include "IPSpaceSweeper.hpp"
 #include "DataStore.hpp"
 
-
+static constexpr size_t max_sockets = 60000;
 SSL_CTX_ptr g_ssl_ctx(nullptr, SSL_CTX_free);;
 
 
@@ -44,6 +44,9 @@ void exec_thread(DataStore& datastore, IPSpaceSweeper ip_range, const size_t soc
 {
    std::vector<ConnSocket> socks(sockets_by_thread);
    std::vector<pollfd>  fdas(sockets_by_thread);
+   std::vector<ConnSocket::conn_result_t> results;
+
+   results.reserve(sockets_by_thread);
 
    printf("Starting scan...\n");
 
@@ -94,7 +97,7 @@ void exec_thread(DataStore& datastore, IPSpaceSweeper ip_range, const size_t soc
          fdas[i] = socks[i].get_pollfd();
       }
 
-      int ret = poll(fdas.data(), static_cast<unsigned long>(fdas.size()), 100);
+      int ret = poll(fdas.data(), static_cast<unsigned long>(fdas.size()), 500);
       if (ret < 0)
       {
          printf("WSAPoll error - Error=%d\n", WSAGetLastError());
@@ -112,14 +115,17 @@ void exec_thread(DataStore& datastore, IPSpaceSweeper ip_range, const size_t soc
          if (socks[i].process_poll(fdas[i]))
          {
             const auto ret = socks[i].get_result();
-            if (!datastore.insert(ret.ip, ret.port, ret.result, ret.data, ret.data_len))
+            if (ret.result != ConnSocket::Result_e::TCPHandshakeTimeout)
             {
-               printf("Error storing raw response\n");
-            }
+               if (!datastore.insert(ret.ip, ret.port, ret.result, ret.data, ret.data_len))
+               {
+                  printf("Error storing raw response\n");
+               }
 
-            if (ret.result == ConnSocket::Result_e::TLSHandshakeCompleted)
-            {
-               ++returnedData;
+               if (ret.result == ConnSocket::Result_e::TLSHandshakeCompleted)
+               {
+                  ++returnedData;
+               }
             }
             socks[i].disconnect();
          }
@@ -162,15 +168,18 @@ int main()
       IPSpaceSweeper ip_range;
 
       //ip_range.add_range("200.147.118.0", 24);
-      ip_range.add_range("200.0.0.0", 6);
+      ip_range.add_range("192.0.0.0", 3);
 
       DataStore datastore;
 
+      std::vector<std::thread> threads;
+      const unsigned int num_of_threads =  2 * std::thread::hardware_concurrency();
+      const size_t concurrency = max_sockets / num_of_threads;
+
       const auto start = GetTickCount64();
 
-      std::vector<std::thread> threads;
-      const unsigned int num_of_threads = std::thread::hardware_concurrency();
-      const size_t concurrency = 15000 / num_of_threads;
+      printf("Starting %u threads with max_sockets = %zd\n", num_of_threads, max_sockets);
+
       threads.reserve(num_of_threads);
       for (unsigned int i = 0; i < num_of_threads; ++i)
       {

@@ -11,11 +11,17 @@
 #include "IPSpaceSweeper.hpp"
 #include "DataStore.hpp"
 
-static constexpr size_t max_sockets = 60000;
 SSL_CTX_ptr g_ssl_ctx(nullptr, SSL_CTX_free);;
 
 
 static bool g_keep_running = true;
+static std::atomic_size_t g_overall_probed = 0;
+static std::atomic_size_t g_overall_returnedData = 0;
+static std::atomic_size_t g_overall_storedResults = 0;
+
+
+static constexpr int stat_interval = 5000;
+static constexpr size_t max_sockets = 60000;
 
 
 #ifdef _WIN32
@@ -33,27 +39,19 @@ static bool g_keep_running = true;
 #endif
 
 
-static constexpr int stat_interval = 5000;
-
-
-static std::atomic_size_t g_overall_probed = 0;
-static std::atomic_size_t g_overall_returnedData = 0;
-
-
 void exec_thread(DataStore& datastore, IPSpaceSweeper ip_range, const size_t sockets_by_thread)
 {
    std::vector<ConnSocket> socks(sockets_by_thread);
    std::vector<pollfd>  fdas(sockets_by_thread);
-   std::vector<ConnSocket::conn_result_t> results;
-
-   results.reserve(sockets_by_thread);
 
    printf("Starting scan...\n");
 
    while (g_keep_running)
    {
       bool is_there_active_conn = false;
+      bool need_remove = false;
       size_t probed = 0;
+      size_t storedResults = 0;
       for (size_t i = 0; i < socks.size(); ++i)
       {
          if (socks[i].is_connected())
@@ -69,16 +67,25 @@ void exec_thread(DataStore& datastore, IPSpaceSweeper ip_range, const size_t soc
             {
                printf("Error connecting socket %zd to ip 0x%08lX\n", i, ip);
                const auto ret = socks[i].get_result();
-               if (!datastore.insert(ret.ip, ret.port, ret.result, ret.data, ret.data_len))
+               if (ret.result != ConnSocket::Result_e::TCPHandshakeTimeout)
                {
-                  printf("Error storing raw response\n");
+                  if (!datastore.insert(ret.ip, ret.port, ret.result, ret.data, ret.data_len))
+                  {
+                     printf("Error storing raw response\n");
+                  }
+                  ++storedResults;
                }
+               need_remove = true;
             }
             else
             {
                is_there_active_conn = true;
                fdas[i] = socks[i].get_pollfd();
             }
+         }
+         else
+         {
+            need_remove = true;
          }
       }
 
@@ -90,11 +97,14 @@ void exec_thread(DataStore& datastore, IPSpaceSweeper ip_range, const size_t soc
          break;
       }
 
-      socks.erase(std::remove_if(socks.begin(), socks.end(), [](const auto& it) {return !it.is_connected(); }), socks.end());
-      fdas.resize(socks.size());
-      for (size_t i = 0; i < socks.size(); ++i)
+      if (need_remove)
       {
-         fdas[i] = socks[i].get_pollfd();
+         socks.erase(std::remove_if(socks.begin(), socks.end(), [](const auto& it) {return !it.is_connected(); }), socks.end());
+         fdas.resize(socks.size());
+         for (size_t i = 0; i < socks.size(); ++i)
+         {
+            fdas[i] = socks[i].get_pollfd();
+         }
       }
 
       int ret = poll(fdas.data(), static_cast<unsigned long>(fdas.size()), 500);
@@ -102,11 +112,6 @@ void exec_thread(DataStore& datastore, IPSpaceSweeper ip_range, const size_t soc
       {
          printf("WSAPoll error - Error=%d\n", WSAGetLastError());
          break;
-      }
-
-      if (!datastore.begin())
-      {
-         printf("Error starting data store transaction\n");
       }
 
       size_t returnedData = 0;
@@ -126,17 +131,14 @@ void exec_thread(DataStore& datastore, IPSpaceSweeper ip_range, const size_t soc
                {
                   ++returnedData;
                }
+               ++storedResults;
             }
             socks[i].disconnect();
          }
       }
 
-      if (!datastore.commit())
-      {
-         printf("Error commiting data store transaction\n");
-      }
-
       g_overall_returnedData += returnedData;
+      g_overall_storedResults += storedResults;
    }
 }
 
@@ -168,7 +170,7 @@ int main()
       IPSpaceSweeper ip_range;
 
       //ip_range.add_range("200.147.118.0", 24);
-      ip_range.add_range("192.0.0.0", 3);
+      ip_range.add_range("192.0.0.0", 2);
 
       DataStore datastore;
 
@@ -196,9 +198,11 @@ int main()
          {
             const auto probed = g_overall_probed.load();
             const auto returnedData = g_overall_returnedData.load();
+            const auto storedResults = g_overall_storedResults.load();
             const auto [dummy, max_count] = ip_range.get_stats();
             const auto percentage = (100.0 * probed) / max_count;
             const auto data_percentage = (100.0 * returnedData) / probed;
+            const auto results_percentage = (100.0 * storedResults) / probed;
             const unsigned long long elapsed = (now - start) / 1000;
             const unsigned long long remaining = static_cast<unsigned long long>(((elapsed * 100) / percentage) - elapsed);
 
@@ -213,10 +217,12 @@ int main()
             printf("\n******************** PROGRESS ********************\n"
                "  Sweeped %zd of %lu addresses - %5.2f%%\n"
                "  %zd IPs returned data - %5.2f%%\n"
+               "  %zd IPs stored some result - %5.2f%%\n"
                "  Elapsed:   %4lldh %02lldmin %02llds\n"
                "  Remaining: %4lldh %02lldmin %02llds\n",
                probed, max_count, percentage,
                returnedData, data_percentage,
+               storedResults, results_percentage,
                elapsed_hou, elapsed_min, elapsed_sec,
                remaining_hou, remaining_min, remaining_sec);
 
@@ -237,11 +243,15 @@ int main()
          }
       }
 
+      datastore.commit_transaction();
+
       const auto probed = g_overall_probed.load();
       const auto returnedData = g_overall_returnedData.load();
+      const auto storedResults = g_overall_storedResults.load();
       const auto [dummy, max_count] = ip_range.get_stats();
       const auto percentage = (100.0 * probed) / max_count;
       const auto data_percentage = (100.0 * returnedData) / probed;
+      const auto results_percentage = (100.0 * storedResults) / probed;
       const unsigned long long elapsed = (GetTickCount64() - start) / 1000;
 
       const auto elapsed_sec = elapsed % 60;
@@ -251,6 +261,7 @@ int main()
       printf("\n******************** FINISHED ********************\n");
       printf("  Sweeped %zd of %lu addresses - %5.2f%%\n", probed, max_count, percentage);
       printf("  %zd IPs returned data - %5.2f%%\n", returnedData, data_percentage);
+      printf("  %zd IPs stored some result - %5.2f%%\n", storedResults, results_percentage);
       printf("  Elapsed: %lldh %02lldmin %02llds\n", elapsed_hou, elapsed_min, elapsed_sec );
       printf("\n**************************************************\n");
    }

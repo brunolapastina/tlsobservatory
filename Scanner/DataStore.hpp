@@ -9,7 +9,7 @@ static constexpr std::string_view query_create_table{
    "CREATE TABLE IF NOT EXISTS raw_data (ip INTEGER, port MEDIUMINT, fetchTime UNSIGNED INTEGER, result INTEGER, response BLOB)"
 };
 
-static constexpr std::string_view query_begin_transaction{ "BEGIN" };
+static constexpr std::string_view query_begin_transaction{ "BEGIN TRANSACTION" };
 
 static constexpr std::string_view query_commit_transaction{ "COMMIT" };
 
@@ -18,7 +18,7 @@ static constexpr std::string_view query_insert_record{
 };
 
 
-static unsigned long long GetTimstamp()
+static unsigned long long GetTimestamp()
 {
 #ifdef _WIN32
    SYSTEMTIME sysTime;
@@ -75,6 +75,11 @@ public:
 
    ~DataStore()
    {
+      if (m_isDuringTransaction)
+      {
+         commit_transaction();
+      }
+      
       int rc = sqlite3_finalize(m_insert_stml);
       if (rc != SQLITE_OK)
       {
@@ -96,25 +101,36 @@ public:
       sqlite3_close(m_db);
    }
 
-   bool begin()
+   bool begin_transaction()
    {
-      m_transaction_lock.lock();
+      if (m_isDuringTransaction)
+      {
+         return true;
+      }
+
       int rc = sqlite3_step(m_begin_stml);
       if (SQLITE_DONE != rc)
       {
          printf("sqlite3_step(begin) error: %s\n", sqlite3_errmsg(m_db));
-         m_transaction_lock.unlock();
          return false;
       }
 
       sqlite3_clear_bindings(m_begin_stml);
       sqlite3_reset(m_begin_stml);
 
+      m_transactionStart = GetTimestamp();
+      m_isDuringTransaction = true;
+
       return true;
    }
 
-   bool commit()
+   bool commit_transaction()
    {
+      if (!m_isDuringTransaction)
+      {
+         return true;
+      }
+
       int rc = sqlite3_step(m_commit_stml);
       if (SQLITE_DONE != rc)
       {
@@ -125,17 +141,36 @@ public:
       sqlite3_clear_bindings(m_commit_stml);
       sqlite3_reset(m_commit_stml);
 
-      m_transaction_lock.unlock();
+      m_isDuringTransaction = false;
+
+      return true;
+   }
+
+   bool check_commit_interval()
+   {
+      const auto transaction_duration = (GetTimestamp() - m_transactionStart) / 10000; // Convert elapsed from 10s of nanoseconds to ms
+      if (transaction_duration >= max_transaction_duration)
+      {
+         //printf("Commiting after %llu ms\n", transaction_duration);
+         if (!commit_transaction())
+         {
+            printf("Error commiting current transation\n");
+            return false;
+         }
+
+         if (!begin_transaction())
+         {
+            printf("begin_transaction error\n");
+            return false;
+         }
+      }
 
       return true;
    }
 
    bool insert(unsigned long ip, unsigned short port, ConnSocket::Result_e result, const uint8_t* data, size_t data_len)
    {
-      if (result == ConnSocket::Result_e::TCPHandshakeTimeout)
-      {  // Does not store host that didn't answer
-         return true;
-      }
+      std::unique_lock<std::mutex> lck(m_transaction_lock);
 
       int rc = sqlite3_bind_int64(m_insert_stml, 1, ip);
       if (rc != SQLITE_OK)
@@ -151,7 +186,7 @@ public:
          return false;
       }
 
-      rc = sqlite3_bind_int64(m_insert_stml, 3, GetTimstamp());
+      rc = sqlite3_bind_int64(m_insert_stml, 3, GetTimestamp());
       if (rc != SQLITE_OK)
       {
          printf("sqlite3_bind_int(port) error: %s\n", sqlite3_errmsg(m_db));
@@ -172,6 +207,12 @@ public:
          return false;
       }
 
+      if (!begin_transaction())
+      {
+         printf("begin_transaction error\n");
+         return false;
+      }
+
 		rc = sqlite3_step(m_insert_stml);
 		if (SQLITE_DONE != rc)
 		{
@@ -182,11 +223,20 @@ public:
       sqlite3_clear_bindings(m_insert_stml);
       sqlite3_reset(m_insert_stml);
 
+      if (!check_commit_interval())
+      {
+         printf("Error during checking commit interval\n");
+         return false;
+      }
+
       return true;
    }
 
 private:
+   static constexpr unsigned long long max_transaction_duration = 5000;
    std::mutex m_transaction_lock;
+   bool m_isDuringTransaction = false;
+   unsigned long long m_transactionStart = 0;
    sqlite3* m_db = nullptr;
    sqlite3_stmt* m_insert_stml = nullptr;
    sqlite3_stmt* m_begin_stml = nullptr;

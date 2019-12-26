@@ -101,7 +101,7 @@ public:
       sqlite3_close(m_db);
    }
 
-   bool begin_transaction()
+   bool begin_transaction() noexcept
    {
       if (m_isDuringTransaction)
       {
@@ -124,35 +124,19 @@ public:
       return true;
    }
 
-   bool commit_transaction()
+   bool commit_transaction() noexcept
    {
-      if (!m_isDuringTransaction)
-      {
-         return true;
-      }
-
-      int rc = sqlite3_step(m_commit_stml);
-      if (SQLITE_DONE != rc)
-      {
-         printf("sqlite3_step(commit) error: %s\n", sqlite3_errmsg(m_db));
-         return false;
-      }
-
-      sqlite3_clear_bindings(m_commit_stml);
-      sqlite3_reset(m_commit_stml);
-
-      m_isDuringTransaction = false;
-
-      return true;
+      std::unique_lock<std::mutex> lck(m_transaction_lock);
+      return commit_transaction_int();
    }
 
-   bool check_commit_interval()
+   bool check_commit_interval() noexcept
    {
       const auto transaction_duration = (GetTimestamp() - m_transactionStart) / 10000; // Convert elapsed from 10s of nanoseconds to ms
       if (transaction_duration >= max_transaction_duration)
       {
          //printf("Commiting after %llu ms\n", transaction_duration);
-         if (!commit_transaction())
+         if (!commit_transaction_int())
          {
             printf("Error commiting current transation\n");
             return false;
@@ -168,7 +152,7 @@ public:
       return true;
    }
 
-   bool insert(unsigned long ip, unsigned short port, ConnSocket::Result_e result, const uint8_t* data, size_t data_len)
+   bool insert(unsigned long ip, unsigned short port, ConnSocket::Result_e result, const uint8_t* data, size_t data_len) noexcept
    {
       std::unique_lock<std::mutex> lck(m_transaction_lock);
 
@@ -241,4 +225,26 @@ private:
    sqlite3_stmt* m_insert_stml = nullptr;
    sqlite3_stmt* m_begin_stml = nullptr;
    sqlite3_stmt* m_commit_stml = nullptr;
+
+   bool commit_transaction_int() noexcept
+   {
+      if (!m_isDuringTransaction)
+      {
+         return true;
+      }
+
+      int rc = sqlite3_step(m_commit_stml);
+      if (SQLITE_DONE != rc)
+      {
+         printf("sqlite3_step(commit) error: %s\n", sqlite3_errmsg(m_db));
+         return false;
+      }
+
+      sqlite3_clear_bindings(m_commit_stml);
+      sqlite3_reset(m_commit_stml);
+
+      m_isDuringTransaction = false;
+
+      return true;
+   }
 };

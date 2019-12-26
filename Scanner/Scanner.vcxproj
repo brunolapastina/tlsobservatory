@@ -76,7 +76,7 @@
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
       <ConformanceMode>true</ConformanceMode>
-      <PreprocessorDefinitions>WIN32_LEAN_AND_MEAN;SQLITE_OMIT_DEPRECATED;SQLITE_TEMP_STORE=2;SQLITE_THREADSAFE=1;SQLITE_OMIT_DECLTYPE;SQLITE_USE_ALLOCA;SQLITE_LIKE_DOESNT_MATCH_BLOBS;SQLITE_OMIT_AUTOINIT;SQLITE_OMIT_AUTORESET;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32_LEAN_AND_MEAN;SQLITE_OMIT_DEPRECATED;SQLITE_TEMP_STORE=2;SQLITE_THREADSAFE=0;SQLITE_OMIT_DECLTYPE;SQLITE_USE_ALLOCA;SQLITE_LIKE_DOESNT_MATCH_BLOBS;SQLITE_OMIT_AUTOINIT;SQLITE_OMIT_AUTORESET;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
@@ -90,7 +90,7 @@
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
       <ConformanceMode>true</ConformanceMode>
-      <PreprocessorDefinitions>WIN32_LEAN_AND_MEAN;SQLITE_OMIT_DEPRECATED;SQLITE_TEMP_STORE=2;SQLITE_THREADSAFE=1;SQLITE_OMIT_DECLTYPE;SQLITE_USE_ALLOCA;SQLITE_LIKE_DOESNT_MATCH_BLOBS;SQLITE_OMIT_AUTOINIT;SQLITE_OMIT_AUTORESET;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32_LEAN_AND_MEAN;SQLITE_OMIT_DEPRECATED;SQLITE_TEMP_STORE=2;SQLITE_THREADSAFE=0;SQLITE_OMIT_DECLTYPE;SQLITE_USE_ALLOCA;SQLITE_LIKE_DOESNT_MATCH_BLOBS;SQLITE_OMIT_AUTOINIT;SQLITE_OMIT_AUTORESET;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>..\Common;C:\Program Files\OpenSSL-Win64\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
@@ -108,7 +108,7 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
       <ConformanceMode>true</ConformanceMode>
-      <PreprocessorDefinitions>WIN32_LEAN_AND_MEAN;SQLITE_OMIT_DEPRECATED;SQLITE_TEMP_STORE=2;SQLITE_THREADSAFE=1;SQLITE_OMIT_DECLTYPE;SQLITE_USE_ALLOCA;SQLITE_LIKE_DOESNT_MATCH_BLOBS;SQLITE_OMIT_AUTOINIT;SQLITE_OMIT_AUTORESET;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32_LEAN_AND_MEAN;SQLITE_OMIT_DEPRECATED;SQLITE_TEMP_STORE=2;SQLITE_THREADSAFE=0;SQLITE_OMIT_DECLTYPE;SQLITE_USE_ALLOCA;SQLITE_LIKE_DOESNT_MATCH_BLOBS;SQLITE_OMIT_AUTOINIT;SQLITE_OMIT_AUTORESET;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
@@ -126,7 +126,7 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
       <ConformanceMode>true</ConformanceMode>
-      <PreprocessorDefinitions>WIN32_LEAN_AND_MEAN;SQLITE_OMIT_DEPRECATED;SQLITE_TEMP_STORE=2;SQLITE_THREADSAFE=1;SQLITE_OMIT_DECLTYPE;SQLITE_USE_ALLOCA;SQLITE_LIKE_DOESNT_MATCH_BLOBS;SQLITE_OMIT_AUTOINIT;SQLITE_OMIT_AUTORESET;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32_LEAN_AND_MEAN;SQLITE_OMIT_DEPRECATED;SQLITE_TEMP_STORE=2;SQLITE_THREADSAFE=0;SQLITE_OMIT_DECLTYPE;SQLITE_USE_ALLOCA;SQLITE_LIKE_DOESNT_MATCH_BLOBS;SQLITE_OMIT_AUTOINIT;SQLITE_OMIT_AUTORESET;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>..\Common;C:\Program Files\OpenSSL-Win64\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>

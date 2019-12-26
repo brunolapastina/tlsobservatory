@@ -60,7 +60,7 @@ public:
       m_recv_data.reserve(6 * 1024);
    }
 
-   bool is_connected() const noexcept
+   inline bool is_connected() const noexcept
    {
       return (m_sock != INVALID_SOCKET);
    }
@@ -258,7 +258,7 @@ public:
       size_t         data_len;
    };
 
-   conn_result_t get_result() noexcept
+   inline conn_result_t get_result() const noexcept
    {
       conn_result_t ret;
       ret.ip       = m_address;
@@ -287,7 +287,7 @@ private:
 
    std::vector<uint8_t> m_recv_data;
 
-   bool send(const char* data, int len) noexcept
+   inline bool send(const char* data, int len) noexcept
    {
       int ret = ::send(m_sock, data, len, 0);
       const auto err = WSAGetLastError();
@@ -304,7 +304,7 @@ private:
       return true;
    }
 
-   int recv(char* data, int maxlen) noexcept
+  inline  int recv(char* data, int maxlen) noexcept
    {
       int ret = ::recv(m_sock, data, maxlen, 0);
       return ret;

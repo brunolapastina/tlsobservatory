@@ -29,5 +29,8 @@
     <ClInclude Include="..\Common\sqlite3.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="SSL_defs.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

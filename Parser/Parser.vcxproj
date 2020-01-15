@@ -146,11 +146,13 @@
   <ItemGroup>
     <ClInclude Include="..\Common\sqlite3.h" />
     <ClInclude Include="DataStore.hpp" />
+    <ClInclude Include="sha256.hpp" />
     <ClInclude Include="SSL_defs.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\Common\sqlite3.c" />
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="sha256.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

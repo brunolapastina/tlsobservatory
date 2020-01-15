@@ -36,7 +36,7 @@ class DataStore
 public:
    DataStore()
    {
-      int rc = sqlite3_open("raw_data.db", &m_db);
+      int rc = sqlite3_open("tls_observatory.db", &m_db);
       if (rc)
       {
          throw std::runtime_error(std::string("Can't open database: ") + sqlite3_errmsg(m_db));

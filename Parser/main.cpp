@@ -3,6 +3,9 @@
 #include <chrono>
 #include <unordered_map>
 #include <Windows.h>
+#include <openssl/rsa.h>
+#include <openssl/pem.h>
+#include <openssl/ec.h>
 #include "DataStore.hpp"
 #include "SSL_defs.h"
 #include "sha256.hpp"
@@ -13,7 +16,87 @@ std::unordered_map<SHA256Hash, bool> map;
 static size_t duplicates = 0;
 
 
-static size_t ProcessHandshakeMessage(const Handshake& handshake)
+static void dump(const char* label, const uint8_t* data, size_t len)
+{
+   printf("%s: ", label);
+   for (size_t i = 0; i < len; ++i)
+   {
+      printf("%02X", data[i]);
+   }
+   printf("\n\n");
+}
+
+
+static bool ProcessCertificate(const uint8_t* data, size_t len, const long long ip)
+{
+   std::unique_ptr<X509, decltype(&X509_free)> cert(d2i_X509(NULL, &data, len), &X509_free);
+   if (!cert)
+   {
+      //printf("Not a cert at all!\n");
+      return false;
+   }
+
+   EVP_PKEY* public_key = X509_get0_pubkey(cert.get());
+   if (!public_key)
+   {
+      if (data[0] == 0x00)
+      {
+         printf("Not a public key at %lld.%lld.%lld.%llu, but starts with 0x00\n", ip & 0x000000FF, (ip & 0x0000FF00) >> 8, (ip & 0x00FF0000) >> 16, (ip & 0xFF000000) >> 24);
+      }
+      else if (data[0] == 0x0E)
+      {
+         printf("Not a public key at %lld.%lld.%lld.%llu, but starts with 0x0E\n", ip & 0x000000FF, (ip & 0x0000FF00) >> 8, (ip & 0x00FF0000) >> 16, (ip & 0xFF000000) >> 24);
+      }
+      else
+      {
+         printf("Not a public key at %lld.%lld.%lld.%llu\n", ip & 0x000000FF, (ip & 0x0000FF00) >> 8, (ip & 0x00FF0000) >> 16, (ip & 0xFF000000) >> 24);
+      }
+
+      return false;
+   }
+   
+   const RSA* rsa_key = EVP_PKEY_get0_RSA(public_key);   // Does not increment reference count
+   if (rsa_key != nullptr)
+   {
+      int bits = RSA_bits(rsa_key);
+      return true;
+   }
+
+   const EC_KEY* ec_key = EVP_PKEY_get0_EC_KEY(public_key);   // Does not increment reference count
+   if (ec_key != nullptr)
+   {
+      int bits = EC_GROUP_get_degree(EC_KEY_get0_group(ec_key));
+      if ((bits != 256) && (bits != 384) && (bits != 521))
+      {
+         printf("Strange EC keylen = %d\n", bits);
+      }
+            
+      return true;
+   }
+
+   const DSA* dsa_key = EVP_PKEY_get0_DSA(public_key);
+   if (dsa_key != nullptr)
+   {
+      int bits = DSA_bits(dsa_key);
+      printf("DSA key with %d bits\n", bits);
+      dump("DSA Key", data, len);
+      return false;
+   }
+         
+   const DH* dh_key = EVP_PKEY_get0_DH(public_key);
+   if (dh_key != nullptr)
+   {
+      dump("DH Key", data, len);
+      return false;
+   }
+
+   dump("Not RSA, EC, DSA nor DH", data, len);
+
+   return false;
+}
+
+
+static size_t ProcessHandshakeMessage(const Handshake& handshake, const long long ip)
 {
    size_t certs_found = 0;
 
@@ -37,23 +120,21 @@ static size_t ProcessHandshakeMessage(const Handshake& handshake)
             break;
          }
 
-         /*printf("Certificate = ");
-         for (uint32_t j = 0; j < cert_len; ++j)
-         {
-            printf("%02X", handshake.msg[i + 3 + j]);
-         }
-         printf("\n\n");*/
-
          SHA256Hash hash = SHA256::hash(&handshake.msg[i + 3], cert_len);
          auto ret = map.try_emplace(hash, true);
          if (ret.second)
          {
-            ++certs_found;
+            if (ProcessCertificate(&handshake.msg[i + 3], cert_len, ip))
+            {
+               ++certs_found;
+            }
          }
          else
          {
             ++duplicates;
          }
+         
+         //++certs_found;
 
          i += 3 + cert_len;
       }
@@ -63,7 +144,7 @@ static size_t ProcessHandshakeMessage(const Handshake& handshake)
 }
 
 
-static size_t ProcessRecordMessage(const TLSPlaintext& record)
+static size_t ProcessRecordMessage(const TLSPlaintext& record, const long long ip)
 {
    size_t certs_found = 0;
 
@@ -82,7 +163,7 @@ static size_t ProcessRecordMessage(const TLSPlaintext& record)
          return certs_found;
       }
 
-      certs_found += ProcessHandshakeMessage(handshake);
+      certs_found += ProcessHandshakeMessage(handshake, ip);
 
       i += Handshake::HeaderSize + handshake.length;
    }
@@ -91,7 +172,7 @@ static size_t ProcessRecordMessage(const TLSPlaintext& record)
 }
 
 
-static size_t ParseResponse(const unsigned char* response, const int response_len)
+static size_t ParseResponse(const unsigned char* response, const int response_len, const long long ip)
 {
    size_t certs_found = 0;
 
@@ -113,7 +194,7 @@ static size_t ParseResponse(const unsigned char* response, const int response_le
             return certs_found;
          }
          
-         certs_found += ProcessRecordMessage(record);
+         certs_found += ProcessRecordMessage(record, ip);
 
          i += TLSPlaintext::HeaderSize + record.length;
       }
@@ -156,7 +237,7 @@ int main()
       }
       else if(response[0] == 0x16)
       {
-         const auto ret = ParseResponse(response, response_len);
+         const auto ret = ParseResponse(response, response_len, ip);
          certs_found += ret;
          valid_response += (ret > 0);
       }

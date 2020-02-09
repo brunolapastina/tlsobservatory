@@ -6,14 +6,15 @@
 #include <openssl/rsa.h>
 #include <openssl/pem.h>
 #include <openssl/ec.h>
-#include "DataStore.hpp"
+#include "DataStoreReader.hpp"
+#include "DataStoreWriter.hpp"
 #include "SSL_defs.h"
 #include "sha256.hpp"
 
 
-std::unordered_map<SHA256Hash, bool> map;
-
+static std::unordered_map<SHA256Hash, bool> map;
 static size_t duplicates = 0;
+static DataStoreWriter outputDs;
 
 
 static void dump(const char* label, const uint8_t* data, size_t len)
@@ -29,7 +30,14 @@ static void dump(const char* label, const uint8_t* data, size_t len)
 
 static bool ProcessCertificate(const uint8_t* data, size_t len, const long long ip)
 {
-   std::unique_ptr<X509, decltype(&X509_free)> cert(d2i_X509(NULL, &data, len), &X509_free);
+   /*if (data[0] != 0x30 || data[1] != 0x82)
+   {
+      printf("Diferente: %02X %02X %02X %02X %02X %02X\n", data[0], data[1], data[2], data[3], data[4], data[5]);
+      dump("EC Key", data, len);
+   }*/
+   
+   const uint8_t* tmp = data;
+   std::unique_ptr<X509, decltype(&X509_free)> cert(d2i_X509(NULL, &tmp, static_cast<long>(len)), &X509_free);
    if (!cert)
    {
       //printf("Not a cert at all!\n");
@@ -59,6 +67,8 @@ static bool ProcessCertificate(const uint8_t* data, size_t len, const long long 
    if (rsa_key != nullptr)
    {
       int bits = RSA_bits(rsa_key);
+      // dump("RSA Key", data, len);
+      outputDs.insert(KeyType_t::RSA, bits, data, len);
       return true;
    }
 
@@ -70,6 +80,9 @@ static bool ProcessCertificate(const uint8_t* data, size_t len, const long long 
       {
          printf("Strange EC keylen = %d\n", bits);
       }
+
+      //dump("EC Key", data, len);
+      outputDs.insert(KeyType_t::EC, bits, data, len);
             
       return true;
    }
@@ -210,7 +223,7 @@ static size_t ParseResponse(const unsigned char* response, const int response_le
 
 int main()
 {
-   DataStore datastore;
+   DataStoreReader inputDs;
 
    size_t no_response = 0;
    size_t invalid_response = 0;
@@ -221,7 +234,7 @@ int main()
 
    auto start = std::chrono::system_clock::now();
 
-   datastore.for_each_row("SELECT ip, port, fetchTime, result, response from raw_data", [&](sqlite3_stmt* stml)
+   inputDs.for_each_row("SELECT ip, port, fetchTime, result, response from raw_data", [&](sqlite3_stmt* stml)
    {
       const long long ip                 = sqlite3_column_int64(stml, 0);
       const unsigned int port            = sqlite3_column_int(stml, 1);

@@ -149,7 +149,8 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="..\Common\sqlite3.h" />
-    <ClInclude Include="DataStore.hpp" />
+    <ClInclude Include="DataStoreReader.hpp" />
+    <ClInclude Include="DataStoreWriter.hpp" />
     <ClInclude Include="sha256.hpp" />
     <ClInclude Include="SSL_defs.h" />
   </ItemGroup>

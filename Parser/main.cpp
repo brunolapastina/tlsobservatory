@@ -47,18 +47,8 @@ static bool ProcessCertificate(const uint8_t* data, size_t len, const long long 
    EVP_PKEY* public_key = X509_get0_pubkey(cert.get());
    if (!public_key)
    {
-      if (data[0] == 0x00)
-      {
-         printf("Not a public key at %lld.%lld.%lld.%llu, but starts with 0x00\n", ip & 0x000000FF, (ip & 0x0000FF00) >> 8, (ip & 0x00FF0000) >> 16, (ip & 0xFF000000) >> 24);
-      }
-      else if (data[0] == 0x0E)
-      {
-         printf("Not a public key at %lld.%lld.%lld.%llu, but starts with 0x0E\n", ip & 0x000000FF, (ip & 0x0000FF00) >> 8, (ip & 0x00FF0000) >> 16, (ip & 0xFF000000) >> 24);
-      }
-      else
-      {
-         printf("Not a public key at %lld.%lld.%lld.%llu\n", ip & 0x000000FF, (ip & 0x0000FF00) >> 8, (ip & 0x00FF0000) >> 16, (ip & 0xFF000000) >> 24);
-      }
+      printf("Not a public key at %lld.%lld.%lld.%llu\n", ip & 0x000000FF, (ip & 0x0000FF00) >> 8, (ip & 0x00FF0000) >> 16, (ip & 0xFF000000) >> 24);
+      //dump("Content: ", data, len);
 
       return false;
    }
@@ -91,8 +81,11 @@ static bool ProcessCertificate(const uint8_t* data, size_t len, const long long 
    if (dsa_key != nullptr)
    {
       int bits = DSA_bits(dsa_key);
-      printf("DSA key with %d bits\n", bits);
-      dump("DSA Key", data, len);
+      //printf("DSA key with %d bits\n", bits);
+
+      //dump("DSA Key", data, len);
+      outputDs.insert(KeyType_t::DSA, bits, data, len);
+
       return false;
    }
          

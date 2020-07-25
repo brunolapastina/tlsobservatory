@@ -87,7 +87,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32_LEAN_AND_MEAN;SQLITE_OMIT_DEPRECATED;SQLITE_TEMP_STORE=2;SQLITE_THREADSAFE=0;SQLITE_OMIT_DECLTYPE;SQLITE_USE_ALLOCA;SQLITE_LIKE_DOESNT_MATCH_BLOBS;SQLITE_OMIT_AUTOINIT;SQLITE_OMIT_AUTORESET;NDEBUG;_CONSOLE</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <AdditionalIncludeDirectories>..\Common;C:\Program Files\OpenSSL-Win64\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp17</LanguageStandard>
@@ -108,6 +108,7 @@
       <PreprocessorDefinitions>WIN32_LEAN_AND_MEAN;SQLITE_OMIT_DEPRECATED;SQLITE_TEMP_STORE=2;SQLITE_THREADSAFE=0;SQLITE_OMIT_DECLTYPE;SQLITE_USE_ALLOCA;SQLITE_LIKE_DOESNT_MATCH_BLOBS;SQLITE_OMIT_AUTOINIT;SQLITE_OMIT_AUTORESET;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp17</LanguageStandard>
+      <AdditionalIncludeDirectories>..\Common;C:\Program Files\OpenSSL-Win64\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -136,9 +137,10 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>WIN32_LEAN_AND_MEAN;SQLITE_OMIT_DEPRECATED;SQLITE_TEMP_STORE=2;SQLITE_THREADSAFE=0;SQLITE_OMIT_DECLTYPE;SQLITE_USE_ALLOCA;SQLITE_LIKE_DOESNT_MATCH_BLOBS;SQLITE_OMIT_AUTOINIT;SQLITE_OMIT_AUTORESET;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32_LEAN_AND_MEAN;SQLITE_OMIT_DEPRECATED;SQLITE_TEMP_STORE=2;SQLITE_THREADSAFE=0;SQLITE_OMIT_DECLTYPE;SQLITE_USE_ALLOCA;SQLITE_LIKE_DOESNT_MATCH_BLOBS;SQLITE_OMIT_AUTOINIT;SQLITE_OMIT_AUTORESET;NDEBUG;_CONSOLE</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp17</LanguageStandard>
+      <AdditionalIncludeDirectories>..\Common;C:\Program Files\OpenSSL-Win64\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
